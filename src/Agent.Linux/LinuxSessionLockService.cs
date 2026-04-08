@@ -36,7 +36,9 @@ public sealed class LinuxSessionLockService(ICommandRunner commandRunner, IEnvir
         var result = await commandRunner.RunAsync("loginctl", "list-sessions --no-legend", cancellationToken);
         if (!result.Succeeded)
         {
-            throw new InvalidOperationException(result.StandardError.Trim());
+            var detail = FirstNonEmpty(result.StandardError, result.StandardOutput)
+                ?? $"loginctl list-sessions failed with exit code {result.ExitCode}.";
+            throw new InvalidOperationException(detail);
         }
 
         var sessionIds = new List<string>();

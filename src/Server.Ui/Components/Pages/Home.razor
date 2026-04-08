@@ -141,16 +141,18 @@
     {
         _saveMessage = null;
         _errorMessage = null;
-        var result = await ApiClient.SaveChildAsync(new UpsertChildRequest(_form.ChildId, _form.DisplayName, _form.DailyLimitMinutes, _form.IsEnabled));
-        if (result is not null)
+
+        try
         {
+            var result = await ApiClient.SaveChildAsync(new UpsertChildRequest(_form.ChildId, _form.DisplayName, _form.DailyLimitMinutes, _form.IsEnabled));
             _saveMessage = $"Saved '{result.DisplayName}'.";
             _form = new ChildFormModel { IsEnabled = true };
             await LoadDashboardAsync();
-            return;
         }
-
-        _errorMessage = "Saving the child failed. Please check the form values, API key, or server connection and try again.";
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
     }
 
     private static string FormatMinutes(int minutes)

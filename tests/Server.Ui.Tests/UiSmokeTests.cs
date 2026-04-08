@@ -37,11 +37,34 @@ public sealed class UiSmokeTests
         Assert.Equal("child-01", dashboard.Children[0].ChildId);
     }
 
-    private sealed class StubMessageHandler(string payload) : HttpMessageHandler
+    [Fact]
+    public async Task SaveChildAsync_ThrowsApiErrorMessageOnRejectedRequest()
+    {
+        const string payload = """
+        {
+          "error": "validation_failed",
+          "message": "ChildId is required."
+        }
+        """;
+
+        using var client = new HttpClient(new StubMessageHandler(payload, HttpStatusCode.BadRequest))
+        {
+            BaseAddress = new Uri("http://localhost:8080")
+        };
+
+        var apiClient = new SessionGuardApiClient(client);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            apiClient.SaveChildAsync(new UpsertChildRequest("", "Sara", 90, true)));
+
+        Assert.Equal("ChildId is required.", exception.Message);
+    }
+
+    private sealed class StubMessageHandler(string payload, HttpStatusCode statusCode = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(payload, Encoding.UTF8, "application/json")
             });

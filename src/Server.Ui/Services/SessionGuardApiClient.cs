@@ -11,14 +11,17 @@ public sealed class SessionGuardApiClient(HttpClient httpClient)
                ?? new DashboardResponse([], []);
     }
 
-    public async Task<ChildSummary?> SaveChildAsync(UpsertChildRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChildSummary> SaveChildAsync(UpsertChildRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await httpClient.PostAsJsonAsync("/api/admin/children", request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(cancellationToken);
+            var message = error?.Message ?? $"The server rejected the child request ({(int)response.StatusCode}).";
+            throw new InvalidOperationException(message);
         }
 
-        return await response.Content.ReadFromJsonAsync<ChildSummary>(cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ChildSummary>(cancellationToken)
+            ?? throw new InvalidOperationException("The server returned an empty child response.");
     }
 }

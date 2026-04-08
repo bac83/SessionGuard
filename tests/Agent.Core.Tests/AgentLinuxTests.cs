@@ -8,6 +8,20 @@ namespace Agent.Core.Tests;
 public sealed class AgentLinuxTests
 {
     [Fact]
+    public async Task ProcessCommandRunner_CapturesStdoutAndStderr()
+    {
+        var runner = new ProcessCommandRunner();
+
+        var result = await runner.RunAsync(
+            "powershell",
+            "-NoProfile -Command \"Write-Output 'out'; Write-Error 'err'\"",
+            CancellationToken.None);
+
+        Assert.Contains("out", result.StandardOutput);
+        Assert.Contains("err", result.StandardError);
+    }
+
+    [Fact]
     public async Task JsonUserMappingProvider_LoadsAllMappingsFromJson()
     {
         var path = Path.Combine(Path.GetTempPath(), "sessionguard-agent-tests", Guid.NewGuid().ToString("N"), "user-map.json");
@@ -43,6 +57,23 @@ public sealed class AgentLinuxTests
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
         await commandRunner.Received(1).RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LinuxSessionLockService_IncludesExitCodeWhenSessionListingFailsWithoutMessage()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(5, string.Empty, string.Empty));
+
+        var service = new LinuxSessionLockService(commandRunner, environmentReader);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None));
+
+        Assert.Contains("exit code 5", exception.Message);
     }
 
     [Fact]

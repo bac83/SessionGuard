@@ -78,12 +78,15 @@ public sealed class RepositoryTests
         var sqlitePath = CreateSqlitePath();
         await using var dbContext = CreateDbContext(sqlitePath);
         var timeProvider = Substitute.For<TimeProvider>();
-        timeProvider.GetUtcNow().Returns(new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero));
+        timeProvider.GetUtcNow().Returns(
+            new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero));
         var repository = new SessionGuardRepository(dbContext, timeProvider);
 
-        var saved = await repository.UpsertChildAsync(new UpsertChildRequest("child-06 ", "Lina", 90, true), CancellationToken.None);
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-06", "Mila", 120, true), CancellationToken.None);
+        var updated = await repository.UpsertChildAsync(new UpsertChildRequest(" child-06 ", "Mila", 100, true), CancellationToken.None);
 
-        Assert.Equal("child-06", saved.ChildId);
+        Assert.Equal("child-06", updated.ChildId);
         Assert.Single(await dbContext.Children.ToListAsync());
     }
 
@@ -95,12 +98,12 @@ public sealed class RepositoryTests
         var timeProvider = Substitute.For<TimeProvider>();
         timeProvider.GetUtcNow().Returns(
             new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero),
-            new DateTimeOffset(2026, 4, 8, 8, 1, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero));
         var repository = new SessionGuardRepository(dbContext, timeProvider);
 
-        await repository.UpsertChildAsync(new UpsertChildRequest("child-06", "Lina", 90, true), CancellationToken.None);
-        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-06 ", "kid-laptop", "lina", "child-06", "1.0.0"), CancellationToken.None);
-        var updated = await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-06", "kid-laptop-2", "lina", "child-06", "1.0.1"), CancellationToken.None);
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-06", "Mila", 120, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-06", "kid-laptop", "mila", "child-06", "1.0.0"), CancellationToken.None);
+        var updated = await repository.RegisterAgentAsync(new AgentRegistrationRequest(" agent-06 ", "kid-laptop", "mila", "child-06", "1.0.0"), CancellationToken.None);
 
         Assert.Equal("agent-06", updated.AgentId);
         Assert.Single(await dbContext.Agents.ToListAsync());
