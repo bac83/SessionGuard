@@ -104,8 +104,8 @@
                         <div class="summary-row__meta">@($"{agent.LocalUser ?? "unassigned"} -> {agent.ChildId ?? "none"}")</div>
                     </div>
                     <div class="summary-row__value">
-                        <span class="badge @((agent.LastSeenAtUtc is null || agent.LastSeenAtUtc < DateTimeOffset.UtcNow.AddMinutes(-5)) ? "badge--danger" : "badge--success")">
-                            @((agent.LastSeenAtUtc is null || agent.LastSeenAtUtc < DateTimeOffset.UtcNow.AddMinutes(-5)) ? "Offline" : "Online")
+                        <span class="badge @(agent.IsOnline ? "badge--success" : "badge--danger")">
+                            @(agent.IsOnline ? "Online" : "Offline")
                         </span>
                         <strong>@FormatDate(agent.LastSeenAtUtc)</strong>
                     </div>

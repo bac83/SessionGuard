@@ -5,7 +5,7 @@ This guide covers the MVP Linux agent for SessionGuard.
 ## What the agent does
 - Polls the server for the current policy
 - Caches the last valid policy locally
-- Tracks local usage for the active user session
+- Tracks local usage with a poll-interval-based MVP approximation for the mapped user
 - Locks the session when the daily budget is exhausted
 - Shows remaining time in a small local UI
 

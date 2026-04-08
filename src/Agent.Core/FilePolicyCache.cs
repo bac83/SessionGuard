@@ -28,12 +28,7 @@ public sealed class FilePolicyCache(string directoryPath) : IPolicyCache
             await JsonSerializer.SerializeAsync(stream, cachedPolicyState, SessionGuardJsonContext.Default.CachedPolicyState, cancellationToken);
         }
 
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-
-        File.Move(tempPath, path);
+        File.Move(tempPath, path, overwrite: true);
     }
 
     private string GetPath(string localUser) => Path.Combine(directoryPath, $"{localUser}.policy.json");
