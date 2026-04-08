@@ -107,6 +107,8 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         ArgumentException.ThrowIfNullOrWhiteSpace(request.AgentId);
         var now = timeProvider.GetUtcNow();
         var agentId = request.AgentId.Trim();
+        var localUser = string.IsNullOrWhiteSpace(request.LocalUser) ? null : request.LocalUser.Trim();
+        var childId = string.IsNullOrWhiteSpace(request.ChildId) ? null : request.ChildId.Trim();
         var entity = await dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == agentId, cancellationToken);
         if (entity is null)
         {
@@ -115,8 +117,8 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         }
 
         entity.Hostname = request.Hostname.Trim();
-        entity.LocalUser = request.LocalUser;
-        entity.ChildId = request.ChildId;
+        entity.LocalUser = localUser;
+        entity.ChildId = childId;
         entity.AgentVersion = request.AgentVersion;
         entity.LastSeenAtUtc = now;
 

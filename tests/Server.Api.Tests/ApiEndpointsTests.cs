@@ -168,6 +168,21 @@ public sealed class ApiEndpointsTests
         Assert.Equal("agent-01", usage!.AgentId);
     }
 
+    [Fact]
+    public async Task HealthCheck_DoesNotRedirectWhenOnlyHttpIsConfigured()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/healthz");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-api-tests", Guid.NewGuid().ToString("N"));

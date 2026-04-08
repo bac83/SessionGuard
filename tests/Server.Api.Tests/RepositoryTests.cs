@@ -160,6 +160,28 @@ public sealed class RepositoryTests
     }
 
     [Fact]
+    public async Task RegisterAgentAsync_TrimsChildIdAndLocalUserAndTreatsWhitespaceAsNull()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-10", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-10", "kid-laptop", " sara ", " child-10 ", "1.0.0"), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-11", "kid-laptop", "   ", "   ", "1.0.1"), CancellationToken.None);
+
+        var trimmedAgent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-10");
+        var whitespaceAgent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-11");
+
+        Assert.Equal("sara", trimmedAgent.LocalUser);
+        Assert.Equal("child-10", trimmedAgent.ChildId);
+        Assert.Null(whitespaceAgent.LocalUser);
+        Assert.Null(whitespaceAgent.ChildId);
+    }
+
+    [Fact]
     public async Task GetPolicyAsync_UpdatesHeartbeatEvenWithoutPolicy()
     {
         var sqlitePath = CreateSqlitePath();

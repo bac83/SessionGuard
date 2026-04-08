@@ -71,7 +71,7 @@ else
                                 </span>
                             </td>
                             <td>@FormatMinutes(agent.UsedTodayMinutes)</td>
-                            <td>@FormatMinutes(agent.RemainingMinutes ?? GetRemainingMinutes(child, agent))</td>
+                            <td>@FormatMinutes(agent.RemainingMinutes ?? GetRemainingMinutes(child))</td>
                             <td>@FormatLastSeen(agent.LastSeenAtUtc)</td>
                             <td>
                                 <span class="badge @(agent.IsSessionLocked ? "badge--danger" : "badge--muted")">
@@ -99,7 +99,7 @@ else
         return _snapshot?.Children.FirstOrDefault(child => string.Equals(child.ChildId, childId, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static int GetRemainingMinutes(ChildProfile? child, AgentStatus agent)
+    private static int GetRemainingMinutes(ChildProfile? child)
     {
         if (child is null)
         {

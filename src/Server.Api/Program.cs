@@ -18,6 +18,7 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 await app.Services.InitializeServerInfrastructureAsync();
+var hasHttpsEndpoint = HasConfiguredHttpsEndpoint(app.Configuration);
 
 if (app.Environment.IsDevelopment())
 {
@@ -25,7 +26,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
-app.UseHttpsRedirection();
+if (hasHttpsEndpoint)
+{
+    app.UseHttpsRedirection();
+}
 app.UseMiddleware<ApiKeyMiddleware>();
 app.MapHealthChecks("/healthz");
 
@@ -103,5 +107,20 @@ agent.MapPost("/usage", async Task<Results<Ok<UsageReportResponse>, NotFound<Api
 });
 
 app.Run();
+
+static bool HasConfiguredHttpsEndpoint(IConfiguration configuration)
+{
+    var urls = configuration["ASPNETCORE_URLS"];
+    if (!string.IsNullOrWhiteSpace(urls))
+    {
+        return urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(url => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+    }
+
+    return configuration.GetSection("Kestrel:Endpoints")
+        .GetChildren()
+        .Select(endpoint => endpoint["Url"])
+        .Any(url => !string.IsNullOrWhiteSpace(url) && url.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+}
 
 public partial class Program;
