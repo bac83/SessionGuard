@@ -72,7 +72,7 @@ public sealed class AgentCoordinator(
                     mapping.LocalUser,
                     mapping.ChildId,
                     false,
-                    true,
+                    IsOfflineFailure(ex),
                     false,
                     null,
                     0,
@@ -86,6 +86,9 @@ public sealed class AgentCoordinator(
 
         return snapshots;
     }
+
+    private static bool IsOfflineFailure(Exception exception) =>
+        exception is HttpRequestException or TimeoutException or TaskCanceledException;
 
     private async Task<PolicyFetchResponse> TryFetchPolicyAsync(
         UserChildMapping mapping,
