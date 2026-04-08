@@ -1,0 +1,123 @@
+@page "/agents"
+@inject IAdminDashboardStore DashboardStore
+
+<PageTitle>Agent status</PageTitle>
+
+<section class="page-intro">
+    <div>
+        <p class="eyebrow">Agents</p>
+        <h2>Watch Linux agents and their current session state.</h2>
+        <p class="page-lead">These status cards mirror the data the UI will eventually get from the server: online state, last contact, usage, and lock state.</p>
+    </div>
+    <div class="note-card">
+        <strong>Polling first</strong>
+        <p>The agent polls for policy refreshes instead of waiting for push updates.</p>
+    </div>
+</section>
+
+@if (_snapshot is null)
+{
+    <div class="empty-state">Loading agent statuses...</div>
+}
+else if (_snapshot.Agents.Count == 0)
+{
+    <div class="empty-state">No agents registered yet.</div>
+}
+else
+{
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Heartbeat table</p>
+                <h3>Last seen, usage, and lock state.</h3>
+            </div>
+            <div class="panel-meta">
+                <span>@(_snapshot.Agents.Count) agents</span>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="status-table">
+                <thead>
+                    <tr>
+                        <th>Host</th>
+                        <th>User</th>
+                        <th>Child</th>
+                        <th>Status</th>
+                        <th>Used</th>
+                        <th>Remaining</th>
+                        <th>Last seen</th>
+                        <th>Session</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var agent in _snapshot.Agents)
+                    {
+                        var child = GetChild(agent.ChildId);
+                        <tr>
+                            <td>
+                                <strong>@agent.HostName</strong>
+                            </td>
+                            <td>@agent.LinuxUserName</td>
+                            <td>
+                                <div class="table-child">
+                                    <strong>@(child?.DisplayName ?? agent.ChildId)</strong>
+                                    <span>@agent.ChildId</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge @(agent.IsOnline ? "badge--success" : "badge--danger")">
+                                    @(agent.IsOnline ? "Online" : "Offline")
+                                </span>
+                            </td>
+                            <td>@FormatMinutes(agent.UsedTodayMinutes)</td>
+                            <td>@FormatMinutes(agent.RemainingMinutes ?? GetRemainingMinutes(child, agent))</td>
+                            <td>@FormatLastSeen(agent.LastSeenAtUtc)</td>
+                            <td>
+                                <span class="badge @(agent.IsSessionLocked ? "badge--danger" : "badge--muted")">
+                                    @(agent.IsSessionLocked ? "Locked" : "Open")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+
+@code {
+    private DashboardSnapshot? _snapshot;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await DashboardStore.GetSnapshotAsync();
+    }
+
+    private ChildProfile? GetChild(string childId)
+    {
+        return _snapshot?.Children.FirstOrDefault(child => string.Equals(child.ChildId, childId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int GetRemainingMinutes(ChildProfile? child, AgentStatus agent)
+    {
+        if (child is null)
+        {
+            return 0;
+        }
+
+        return child.RemainingMinutes;
+    }
+
+    private static string FormatMinutes(int minutes)
+    {
+        var hours = minutes / 60;
+        var remainder = minutes % 60;
+        return hours == 0 ? $"{remainder} min" : $"{hours}h {remainder:00}m";
+    }
+
+    private static string FormatLastSeen(DateTimeOffset? lastSeenAtUtc)
+    {
+        return lastSeenAtUtc is null ? "Never" : lastSeenAtUtc.Value.ToLocalTime().ToString("dd MMM HH:mm");
+    }
+}

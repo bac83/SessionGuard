@@ -1,0 +1,267 @@
+@page "/children"
+@inject IAdminDashboardStore DashboardStore
+
+<PageTitle>Children</PageTitle>
+
+<section class="page-intro">
+    <div>
+        <p class="eyebrow">Profiles</p>
+        <h2>Manage child profiles and daily budgets.</h2>
+        <p class="page-lead">Each profile carries a Linux-facing child id. Budget changes stay small and visible so the agent can refresh them on its next poll.</p>
+    </div>
+    <div class="note-card">
+        <strong>Offline-safe by design</strong>
+        <p>The agent caches the last valid policy and keeps working even if the server is temporarily unavailable.</p>
+    </div>
+</section>
+
+<div class="content-grid">
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Add profile</p>
+                <h3>Create a new child entry.</h3>
+            </div>
+        </div>
+
+        <EditForm Model="_draft" OnValidSubmit="CreateChildAsync" class="stacked-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-summary" />
+
+            <label class="field">
+                <span>Child ID</span>
+                <InputText class="field-input" @bind-Value="_draft.ChildId" />
+            </label>
+
+            <label class="field">
+                <span>Display name</span>
+                <InputText class="field-input" @bind-Value="_draft.DisplayName" />
+            </label>
+
+            <div class="field-row">
+                <label class="field">
+                    <span>Daily budget (minutes)</span>
+                    <InputNumber class="field-input" @bind-Value="_draft.DailyBudgetMinutes" />
+                </label>
+
+                <label class="checkbox-field">
+                    <InputCheckbox class="checkbox-input" @bind-Value="_draft.IsActive" />
+                    <span>Enabled</span>
+                </label>
+            </div>
+
+            <button type="submit" class="primary-button">Add profile</button>
+        </EditForm>
+
+        @if (!string.IsNullOrWhiteSpace(_feedback))
+        {
+            <p class="status-message status-message--success">@_feedback</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="status-message status-message--error">@_error</p>
+        }
+    </section>
+
+    <section class="panel panel-wide">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Current profiles</p>
+                <h3>Budget and activation controls.</h3>
+            </div>
+            <div class="panel-meta">
+                <span>@(_snapshot?.Children.Count ?? 0) profiles</span>
+            </div>
+        </div>
+
+        @if (_snapshot is null)
+        {
+            <div class="empty-state">Loading child profiles...</div>
+        }
+        else if (_snapshot.Children.Count == 0)
+        {
+            <div class="empty-state">No child profiles yet.</div>
+        }
+        else
+        {
+            <div class="profile-list">
+                @foreach (var child in _snapshot.Children)
+                {
+                    var row = GetBudgetRow(child);
+                    <article class="profile-card">
+                        <div class="profile-card__header">
+                            <div>
+                                <h4>@child.DisplayName</h4>
+                                <p>@child.ChildId</p>
+                            </div>
+                            <span class="badge @(child.IsActive ? "badge--success" : "badge--muted")">
+                                @(child.IsActive ? "Enabled" : "Paused")
+                            </span>
+                        </div>
+
+                        <div class="profile-card__metrics">
+                            <div>
+                                <span class="metric-label">Budget</span>
+                                <strong>@FormatMinutes(child.DailyBudgetMinutes)</strong>
+                            </div>
+                            <div>
+                                <span class="metric-label">Updated</span>
+                                <strong>@FormatTimestamp(child.UpdatedAtUtc)</strong>
+                            </div>
+                        </div>
+
+                        <div class="profile-card__actions">
+                            <label class="field field--inline">
+                                <span>Daily budget</span>
+                                <InputNumber class="field-input field-input--compact" @bind-Value="row.Minutes" />
+                            </label>
+
+                            <button type="button" class="secondary-button" @onclick="() => SaveBudgetAsync(child, row)">
+                                Save budget
+                            </button>
+
+                            <button type="button" class="ghost-button" @onclick="() => ToggleChildActiveAsync(child)">
+                                @(child.IsActive ? "Pause" : "Resume")
+                            </button>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private readonly ChildProfileDraft _draft = new();
+    private readonly Dictionary<string, BudgetRowState> _budgetRows = new(StringComparer.OrdinalIgnoreCase);
+    private DashboardSnapshot? _snapshot;
+    private string? _feedback;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task CreateChildAsync()
+    {
+        ClearMessages();
+
+        try
+        {
+            await DashboardStore.AddChildAsync(_draft);
+            _draft.ChildId = string.Empty;
+            _draft.DisplayName = string.Empty;
+            _draft.DailyBudgetMinutes = 120;
+            _draft.IsActive = true;
+            await ReloadAsync("Child profile added.");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SaveBudgetAsync(ChildProfile child, BudgetRowState row)
+    {
+        ClearMessages();
+
+        try
+        {
+            var updated = await DashboardStore.UpdateChildBudgetAsync(child.ChildId, row.Minutes);
+            row.Minutes = updated.DailyBudgetMinutes;
+            await ReloadAsync($"Updated the daily budget for {updated.DisplayName}.");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ToggleChildActiveAsync(ChildProfile child)
+    {
+        ClearMessages();
+
+        try
+        {
+            var updated = await DashboardStore.SetChildActiveAsync(child.ChildId, !child.IsActive);
+            await ReloadAsync(updated.IsActive
+                ? $"Enabled {updated.DisplayName}."
+                : $"Paused {updated.DisplayName}.");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ReloadAsync(string? feedback = null)
+    {
+        _snapshot = await DashboardStore.GetSnapshotAsync();
+        SyncBudgetRows();
+        _feedback = feedback;
+        StateHasChanged();
+    }
+
+    private void SyncBudgetRows()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        var currentIds = new HashSet<string>(_snapshot.Children.Select(child => child.ChildId), StringComparer.OrdinalIgnoreCase);
+        foreach (var missing in _budgetRows.Keys.Where(id => !currentIds.Contains(id)).ToArray())
+        {
+            _budgetRows.Remove(missing);
+        }
+
+        foreach (var child in _snapshot.Children)
+        {
+            if (_budgetRows.TryGetValue(child.ChildId, out var row))
+            {
+                row.Minutes = child.DailyBudgetMinutes;
+            }
+            else
+            {
+                _budgetRows[child.ChildId] = new BudgetRowState { Minutes = child.DailyBudgetMinutes };
+            }
+        }
+    }
+
+    private BudgetRowState GetBudgetRow(ChildProfile child)
+    {
+        if (_budgetRows.TryGetValue(child.ChildId, out var row))
+        {
+            return row;
+        }
+
+        row = new BudgetRowState { Minutes = child.DailyBudgetMinutes };
+        _budgetRows[child.ChildId] = row;
+        return row;
+    }
+
+    private void ClearMessages()
+    {
+        _feedback = null;
+        _error = null;
+    }
+
+    private static string FormatMinutes(int minutes)
+    {
+        var hours = minutes / 60;
+        var remainder = minutes % 60;
+        return hours == 0 ? $"{remainder} min" : $"{hours}h {remainder:00}m";
+    }
+
+    private static string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        return timestamp.ToLocalTime().ToString("dd MMM HH:mm");
+    }
+
+    private sealed class BudgetRowState
+    {
+        public int Minutes { get; set; }
+    }
+}

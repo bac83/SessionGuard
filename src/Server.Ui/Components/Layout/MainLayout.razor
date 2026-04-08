@@ -1,0 +1,22 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar-panel">
+        <NavMenu />
+    </aside>
+
+    <main class="workspace-panel">
+        <header class="workspace-header">
+            <div>
+                <p class="eyebrow">Linux screen-time control</p>
+                <h1>SessionGuard admin</h1>
+                <p class="workspace-subtitle">Manage child profiles, daily budgets, and agent health from one calm control plane.</p>
+            </div>
+            <div class="workspace-chip">SQLite-backed MVP</div>
+        </header>
+
+        <article class="workspace-content">
+            @Body
+        </article>
+    </main>
+</div>

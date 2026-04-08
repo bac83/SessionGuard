@@ -1,0 +1,16 @@
+[Unit]
+Description=SessionGuard Linux Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/sessionguard
+ExecStart=/usr/bin/dotnet /opt/sessionguard/Agent.Linux.dll
+Restart=always
+RestartSec=10
+Environment=DOTNET_ENVIRONMENT=Production
+
+[Install]
+WantedBy=multi-user.target
