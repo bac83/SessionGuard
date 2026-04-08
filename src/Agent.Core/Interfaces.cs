@@ -25,16 +25,6 @@ public interface IUsageTracker
     Task<int> GetUsedMinutesAsync(UserChildMapping mapping, DateOnly usageDateUtc, CancellationToken cancellationToken);
 }
 
-public sealed record SessionState(bool IsActive, bool IsLocked, string? UserName)
-{
-    public static SessionState Inactive(string? userName = null) => new(false, true, userName);
-}
-
-public interface ISessionStateProvider
-{
-    Task<SessionState> GetStateAsync(CancellationToken cancellationToken = default);
-}
-
 public interface ISessionController
 {
     Task LockAsync(UserChildMapping mapping, CancellationToken cancellationToken);

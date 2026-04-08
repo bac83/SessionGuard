@@ -98,6 +98,56 @@ public sealed class AgentCoordinatorTests
         await sessionController.Received(1).LockAsync(mapping, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task RunOnceAsync_UsesAuthoritativeEmptyPolicyWithoutFallingBackToCache()
+    {
+        var now = new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero);
+        var options = new AgentOptions { AgentId = "agent-01" };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var policyClient = Substitute.For<IPolicyClient>();
+        var policyCache = Substitute.For<IPolicyCache>();
+        var mappingProvider = Substitute.For<IUserMappingProvider>();
+        var usageTracker = Substitute.For<IUsageTracker>();
+        var sessionController = Substitute.For<ISessionController>();
+        var statusStore = Substitute.For<IAgentStatusStore>();
+
+        mappingProvider.GetMappingsAsync(Arg.Any<CancellationToken>()).Returns([mapping]);
+        policyClient.FetchPolicyAsync(mapping, Arg.Any<CancellationToken>())
+            .Returns(new PolicyFetchResponse("agent-01", "child-01", null, now));
+        policyCache.LoadAsync(mapping.LocalUser, Arg.Any<CancellationToken>())
+            .Returns(new CachedPolicyState(
+                mapping.LocalUser,
+                new PolicyFetchResponse(
+                    "agent-01",
+                    "child-01",
+                    new ChildPolicy("child-01", 30, true, "v-cache", new DateOnly(2026, 4, 8), now.AddMinutes(-5)),
+                    now.AddMinutes(-5),
+                    true),
+                now.AddMinutes(-5)));
+        usageTracker.GetUsedMinutesAsync(mapping, Arg.Any<DateOnly>(), Arg.Any<CancellationToken>()).Returns(5);
+
+        var coordinator = new AgentCoordinator(
+            options,
+            policyClient,
+            policyCache,
+            mappingProvider,
+            usageTracker,
+            sessionController,
+            statusStore,
+            new PolicyEvaluator(),
+            new FixedTimeProvider(now),
+            NullLogger<AgentCoordinator>.Instance);
+
+        var result = await coordinator.RunOnceAsync(CancellationToken.None);
+
+        Assert.Single(result);
+        Assert.False(result[0].IsOfflineMode);
+        Assert.False(result[0].PolicyAvailable);
+        await policyCache.DidNotReceive().LoadAsync(mapping.LocalUser, Arg.Any<CancellationToken>());
+        await policyCache.DidNotReceive().SaveAsync(Arg.Any<CachedPolicyState>(), Arg.Any<CancellationToken>());
+        await policyClient.DidNotReceive().ReportUsageAsync(Arg.Any<UsageReportRequest>(), Arg.Any<CancellationToken>());
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;

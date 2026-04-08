@@ -74,6 +74,31 @@ public sealed class RepositoryTests
     }
 
     [Fact]
+    public async Task SaveUsageReport_TrimsAgentIdAndChildIdBeforeLookupAndSave()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-09", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-09", "kid-laptop", "sara", "child-09", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.SaveUsageReportAsync(
+            new UsageReportRequest(" agent-09 ", " child-09 ", "sara", new DateOnly(2026, 4, 8), 35, now),
+            CancellationToken.None);
+
+        var storedReport = await dbContext.UsageReports.SingleAsync();
+
+        Assert.Equal("agent-09", response.AgentId);
+        Assert.Equal("child-09", response.ChildId);
+        Assert.Equal("agent-09", storedReport.AgentId);
+        Assert.Equal("child-09", storedReport.ChildId);
+    }
+
+    [Fact]
     public async Task UpsertChildAsync_ReturnsCurrentUsageAndRemainingMinutes()
     {
         var sqlitePath = CreateSqlitePath();

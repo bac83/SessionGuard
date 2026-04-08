@@ -95,14 +95,16 @@ public sealed class AgentCoordinator(
         try
         {
             var response = await policyClient.FetchPolicyAsync(mapping, cancellationToken);
+            var authoritativeResponse = response with { IsFromCache = false };
+
             if (response.Policy is not null)
             {
                 await policyCache.SaveAsync(
-                    new CachedPolicyState(mapping.LocalUser, response with { IsFromCache = false }, now),
+                    new CachedPolicyState(mapping.LocalUser, authoritativeResponse, now),
                     cancellationToken);
-
-                return response with { IsFromCache = false };
             }
+
+            return authoritativeResponse;
         }
         catch (Exception ex)
         {

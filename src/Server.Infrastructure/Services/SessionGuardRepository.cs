@@ -169,24 +169,26 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
 
     public async Task<UsageReportResponse> SaveUsageReportAsync(UsageReportRequest request, CancellationToken cancellationToken)
     {
+        var normalizedAgentId = request.AgentId.Trim();
+        var normalizedChildId = request.ChildId.Trim();
         var now = timeProvider.GetUtcNow();
-        var agent = await dbContext.Agents.SingleAsync(x => x.AgentId == request.AgentId, cancellationToken);
+        var agent = await dbContext.Agents.SingleAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
 
         var existing = await dbContext.UsageReports.SingleOrDefaultAsync(
-            x => x.AgentId == request.AgentId && x.UsageDateUtc == request.UsageDateUtc,
+            x => x.AgentId == normalizedAgentId && x.UsageDateUtc == request.UsageDateUtc,
             cancellationToken);
 
         if (existing is null)
         {
             existing = new UsageReportEntity
             {
-                AgentId = request.AgentId,
+                AgentId = normalizedAgentId,
                 UsageDateUtc = request.UsageDateUtc
             };
             dbContext.UsageReports.Add(existing);
         }
 
-        existing.ChildId = request.ChildId;
+        existing.ChildId = normalizedChildId;
         existing.LocalUser = request.LocalUser;
         existing.UsedMinutes = request.UsedMinutes;
         existing.ReportedAtUtc = now;
@@ -194,7 +196,7 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         agent.LastSeenAtUtc = now;
         agent.LastUsageReportAtUtc = now;
 
-        var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == request.ChildId, cancellationToken);
+        var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == normalizedChildId, cancellationToken);
         int? remainingMinutes = child is null
             ? null
             : child.IsEnabled
@@ -202,7 +204,7 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
                 : 0;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return new UsageReportResponse(request.AgentId, request.ChildId, request.UsedMinutes, remainingMinutes, now);
+        return new UsageReportResponse(normalizedAgentId, normalizedChildId, request.UsedMinutes, remainingMinutes, now);
     }
 
     private async Task<Dictionary<string, int>> GetLatestUsageByChildAsync(DateOnly today, CancellationToken cancellationToken)

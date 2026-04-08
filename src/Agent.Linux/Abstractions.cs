@@ -15,11 +15,6 @@ public interface IEnvironmentReader
     string? GetEnvironmentVariable(string name);
 }
 
-public interface IChildAssignmentResolver
-{
-    Task<string?> ResolveChildIdAsync(string linuxUserName, CancellationToken cancellationToken = default);
-}
-
 public sealed class SystemEnvironmentReader : IEnvironmentReader
 {
     public string? GetEnvironmentVariable(string name) => Environment.GetEnvironmentVariable(name);

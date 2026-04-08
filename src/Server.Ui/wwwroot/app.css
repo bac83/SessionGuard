@@ -161,6 +161,10 @@ button, input, select, textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.panel-wide {
+    grid-column: 1 / -1;
+}
+
 .stacked-form {
     display: grid;
     gap: 1rem;
@@ -400,6 +404,10 @@ button, input, select, textarea {
     .hero-panel,
     .content-grid--dashboard {
         grid-template-columns: 1fr;
+    }
+
+    .panel-wide {
+        grid-column: auto;
     }
 
     .summary-row,
