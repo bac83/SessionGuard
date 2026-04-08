@@ -68,6 +68,10 @@
         {
             <p class="status-message status-message--success">@_saveMessage</p>
         }
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <p class="status-message status-message--error">@_errorMessage</p>
+        }
 
         <div class="summary-list">
             @foreach (var child in _dashboard?.Children ?? [])
@@ -119,6 +123,7 @@
     private DashboardResponse? _dashboard;
     private ChildFormModel _form = new();
     private string? _saveMessage;
+    private string? _errorMessage;
     private string _lastRefreshLabel = "not loaded";
 
     protected override async Task OnInitializedAsync()
@@ -135,13 +140,17 @@
     private async Task SaveChildAsync()
     {
         _saveMessage = null;
+        _errorMessage = null;
         var result = await ApiClient.SaveChildAsync(new UpsertChildRequest(_form.ChildId, _form.DisplayName, _form.DailyLimitMinutes, _form.IsEnabled));
         if (result is not null)
         {
             _saveMessage = $"Saved '{result.DisplayName}'.";
             _form = new ChildFormModel { IsEnabled = true };
             await LoadDashboardAsync();
+            return;
         }
+
+        _errorMessage = "Saving the child failed. Please check the form values, API key, or server connection and try again.";
     }
 
     private static string FormatMinutes(int minutes)

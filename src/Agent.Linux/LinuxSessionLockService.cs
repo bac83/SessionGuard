@@ -18,7 +18,9 @@ public sealed class LinuxSessionLockService(ICommandRunner commandRunner, IEnvir
             var result = await commandRunner.RunAsync("loginctl", $"lock-session {sessionId}", cancellationToken);
             if (!result.Succeeded)
             {
-                throw new InvalidOperationException(result.StandardError.Trim());
+                var detail = FirstNonEmpty(result.StandardError, result.StandardOutput)
+                    ?? $"loginctl lock-session {sessionId} failed with exit code {result.ExitCode}.";
+                throw new InvalidOperationException(detail);
             }
         }
     }
@@ -59,5 +61,19 @@ public sealed class LinuxSessionLockService(ICommandRunner commandRunner, IEnvir
         }
 
         return sessionIds;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            var trimmed = value?.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                return trimmed;
+            }
+        }
+
+        return null;
     }
 }

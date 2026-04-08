@@ -46,6 +46,23 @@ public sealed class AgentLinuxTests
     }
 
     [Fact]
+    public async Task LinuxSessionLockService_IncludesFallbackDetailsWhenLockFails()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, string.Empty));
+
+        var service = new LinuxSessionLockService(commandRunner, environmentReader);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None));
+
+        Assert.Contains("exit code 1", exception.Message);
+    }
+
+    [Fact]
     public async Task JsonPolicyStatusStore_OverwritesExistingSnapshot()
     {
         var directory = Path.Combine(Path.GetTempPath(), "sessionguard-status-tests", Guid.NewGuid().ToString("N"));

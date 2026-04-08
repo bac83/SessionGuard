@@ -37,12 +37,13 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ChildId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DisplayName);
+        var childId = request.ChildId.Trim();
 
         var now = timeProvider.GetUtcNow();
-        var entity = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == request.ChildId, cancellationToken);
+        var entity = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == childId, cancellationToken);
         if (entity is null)
         {
-            entity = new ChildEntity { ChildId = request.ChildId };
+            entity = new ChildEntity { ChildId = childId };
             dbContext.Children.Add(entity);
         }
 
@@ -102,11 +103,13 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
 
     public async Task<AgentRegistrationResponse> RegisterAgentAsync(AgentRegistrationRequest request, CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(request.AgentId);
         var now = timeProvider.GetUtcNow();
-        var entity = await dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == request.AgentId, cancellationToken);
+        var agentId = request.AgentId.Trim();
+        var entity = await dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == agentId, cancellationToken);
         if (entity is null)
         {
-            entity = new AgentEntity { AgentId = request.AgentId };
+            entity = new AgentEntity { AgentId = agentId };
             dbContext.Agents.Add(entity);
         }
 
