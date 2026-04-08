@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Agent.Core\Agent.Core.csproj" />
+    <ProjectReference Include="..\..\src\Agent.Linux\Agent.Linux.csproj" />
     <ProjectReference Include="..\..\src\Shared.Contracts\Shared.Contracts.csproj" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

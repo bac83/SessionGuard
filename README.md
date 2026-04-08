@@ -49,6 +49,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Linux-specific behavior must sit behind interfaces
 - Root rights only for the agent system service, never for UI parts
 - Config and secrets via env vars or config files, never hardcoded
+- Protect deployed API endpoints with the optional shared API key in `SessionGuard__Security__ApiKey`
 - Prefer polling over push for config refresh
 - Avoid app/web filtering and other out-of-scope controls
 

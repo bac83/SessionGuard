@@ -11,6 +11,7 @@ ExecStart=/usr/bin/dotnet /opt/sessionguard/Agent.Linux.dll
 Restart=always
 RestartSec=10
 Environment=DOTNET_ENVIRONMENT=Production
+# Root is used in the MVP so the agent can resolve and lock desktop sessions via loginctl.
 
 [Install]
 WantedBy=multi-user.target

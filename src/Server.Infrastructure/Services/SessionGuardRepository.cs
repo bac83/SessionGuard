@@ -52,7 +52,11 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         entity.UpdatedAtUtc = now;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return new ChildSummary(entity.ChildId, entity.DisplayName, entity.DailyLimitMinutes, entity.IsEnabled, 0, entity.DailyLimitMinutes, entity.UpdatedAtUtc);
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
+        var usageByChild = await GetLatestUsageByChildAsync(today, cancellationToken);
+        var used = usageByChild.GetValueOrDefault(entity.ChildId);
+        var remaining = entity.IsEnabled ? Math.Max(0, entity.DailyLimitMinutes - used) : 0;
+        return new ChildSummary(entity.ChildId, entity.DisplayName, entity.DailyLimitMinutes, entity.IsEnabled, used, remaining, entity.UpdatedAtUtc);
     }
 
     public async Task<DashboardResponse> GetDashboardAsync(CancellationToken cancellationToken)
@@ -122,6 +126,11 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         var resolvedChildId = childId ?? agent?.ChildId;
         ChildPolicy? policy = null;
 
+        if (agent is not null)
+        {
+            agent.LastSeenAtUtc = now;
+        }
+
         if (!string.IsNullOrWhiteSpace(resolvedChildId))
         {
             var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == resolvedChildId, cancellationToken);
@@ -138,11 +147,14 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
 
                 if (agent is not null)
                 {
-                    agent.LastSeenAtUtc = now;
                     agent.LastPolicyVersion = version;
-                    await dbContext.SaveChangesAsync(cancellationToken);
                 }
             }
+        }
+
+        if (agent is not null)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         return new PolicyFetchResponse(agentId, resolvedChildId, policy, now);
@@ -176,7 +188,11 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         agent.LastUsageReportAtUtc = request.ReportedAtUtc;
 
         var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == request.ChildId, cancellationToken);
-        int? remainingMinutes = child is null ? null : Math.Max(0, child.DailyLimitMinutes - request.UsedMinutes);
+        int? remainingMinutes = child is null
+            ? null
+            : child.IsEnabled
+                ? Math.Max(0, child.DailyLimitMinutes - request.UsedMinutes)
+                : 0;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new UsageReportResponse(request.AgentId, request.ChildId, request.UsedMinutes, remainingMinutes, now);

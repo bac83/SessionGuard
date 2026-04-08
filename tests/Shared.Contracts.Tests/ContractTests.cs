@@ -49,4 +49,26 @@ public sealed class ContractTests
 
         Assert.Equal(cached, roundTripped);
     }
+
+    [Fact]
+    public void PolicyFetchResponse_FactoriesPreserveAgentIdentity()
+    {
+        var snapshot = new PolicySnapshot(
+            "child-01",
+            90,
+            true,
+            2,
+            new DateTimeOffset(2026, 4, 8, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 9, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            "server");
+
+        var success = PolicyFetchResponse.Success("agent-01", snapshot);
+        var failure = PolicyFetchResponse.Failure("agent-02", "child-02", "offline");
+
+        Assert.Equal("agent-01", success.AgentId);
+        Assert.Equal("child-01", success.ChildId);
+        Assert.Equal("agent-02", failure.AgentId);
+        Assert.Equal("child-02", failure.ChildId);
+    }
 }

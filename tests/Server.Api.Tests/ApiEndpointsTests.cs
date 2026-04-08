@@ -44,6 +44,22 @@ public sealed class ApiEndpointsTests
         Assert.Single(dashboard.Agents);
     }
 
+    [Fact]
+    public async Task ApiKey_IsRequired_WhenConfigured()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath, "secret-key");
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/dashboard");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-SessionGuard-ApiKey", "secret-key");
+        var authorized = await client.GetAsync("/api/admin/dashboard");
+        Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-api-tests", Guid.NewGuid().ToString("N"));
@@ -51,11 +67,15 @@ public sealed class ApiEndpointsTests
         return Path.Combine(root, "sessionguard.db");
     }
 
-    private sealed class SessionGuardWebApplicationFactory(string sqlitePath) : WebApplicationFactory<global::Program>
+    private sealed class SessionGuardWebApplicationFactory(string sqlitePath, string? apiKey = null) : WebApplicationFactory<global::Program>
     {
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
         {
             builder.UseSetting("SessionGuard:Storage:SqlitePath", sqlitePath);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                builder.UseSetting("SessionGuard:Security:ApiKey", apiKey);
+            }
         }
     }
 }

@@ -17,17 +17,17 @@ This guide covers the MVP Linux agent for SessionGuard.
 
 ## Install steps
 1. Install the agent package or binary for your environment.
-2. Create a dedicated system service user for the agent.
-3. Configure the server URL, cache/status paths, and user mapping.
-4. Install the example systemd unit from `docs/sessionguard-agent.service`.
-5. Start the service and verify that it can fetch a policy.
-6. Launch the tray UI in the user session if you want visible status.
+2. Configure the server URL, optional API key, cache/status paths, and user mapping.
+3. Install the example systemd unit from `docs/sessionguard-agent.service`.
+4. Start the service and verify that it can fetch a policy.
+5. Launch the tray UI in the user session if you want visible status.
 
 ## Configuration
 Use environment variables or a config file. Keep secrets out of source control.
 
 Typical settings:
 - `SessionGuard__Agent__ServerBaseUrl`
+- `SessionGuard__Agent__ApiKey`
 - `SessionGuard__Agent__AgentId`
 - `SessionGuard__Agent__CacheDirectory`
 - `SessionGuard__Agent__StatusFilePath`
@@ -36,7 +36,7 @@ Typical settings:
 
 ## Operational notes
 - The agent should continue working with the last valid policy if the server is temporarily unavailable.
-- The system service may need elevated permissions for session lock integration.
+- The provided systemd unit runs the agent as `root` in the MVP so `loginctl` session locking works reliably.
 - The tray UI must not require root rights.
 
 ## Verification

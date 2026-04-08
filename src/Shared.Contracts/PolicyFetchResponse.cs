@@ -23,10 +23,10 @@ public sealed partial record PolicyFetchResponse
     [JsonIgnore]
     public bool HasSnapshot => Snapshot is not null;
 
-    public static PolicyFetchResponse Success(PolicySnapshot snapshot)
+    public static PolicyFetchResponse Success(string agentId, PolicySnapshot snapshot)
     {
         return new PolicyFetchResponse(
-                snapshot.ChildId,
+                agentId,
                 snapshot.ChildId,
                 snapshot.ToChildPolicy(),
                 snapshot.CachedAtUtc,
@@ -36,9 +36,9 @@ public sealed partial record PolicyFetchResponse
         };
     }
 
-    public static PolicyFetchResponse Failure(string childId, string errorMessage)
+    public static PolicyFetchResponse Failure(string agentId, string? childId, string errorMessage)
     {
-        return new PolicyFetchResponse(childId, childId, null, DateTimeOffset.MinValue, false)
+        return new PolicyFetchResponse(agentId, childId, null, DateTimeOffset.MinValue, false)
         {
             ErrorMessage = errorMessage
         };

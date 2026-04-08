@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Server.Api;
 using Server.Infrastructure;
 using Server.Infrastructure.Persistence;
 using Server.Infrastructure.Services;
@@ -7,6 +8,8 @@ using Shared.Contracts;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddOptions<ApiSecurityOptions>()
+    .Bind(builder.Configuration.GetSection(ApiSecurityOptions.SectionName));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddServerInfrastructure(builder.Configuration);
@@ -23,6 +26,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
+app.UseMiddleware<ApiKeyMiddleware>();
 app.MapHealthChecks("/healthz");
 
 var admin = app.MapGroup("/api/admin");

@@ -11,6 +11,11 @@ builder.Services.AddHttpClient<SessionGuardApiClient>((serviceProvider, client) 
 {
     var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SessionGuardApiOptions>>().Value;
     client.BaseAddress = new Uri(options.ApiBaseUrl);
+    if (!string.IsNullOrWhiteSpace(options.ApiKey))
+    {
+        client.DefaultRequestHeaders.Remove("X-SessionGuard-ApiKey");
+        client.DefaultRequestHeaders.Add("X-SessionGuard-ApiKey", options.ApiKey);
+    }
 });
 builder.Services.AddScoped<IAdminDashboardStore, ApiAdminDashboardStore>();
 

@@ -6,7 +6,9 @@ This document describes the MVP deployment and day-to-day operations.
 - Run the server in containers.
 - Mount the SQLite database into a persistent volume.
 - Configure the server with environment variables rather than hardcoded values.
+- Set `SessionGuard__Security__ApiKey` in deployed environments so `/api/*` requests require the shared API key header.
 - Keep the server Linux-agnostic.
+- Keep the MVP API on a trusted network or behind a reverse proxy. Authentication and authorization are intentionally deferred for this first slice.
 
 ## SQLite persistence
 - Store the SQLite database in a named or host-mounted volume.
