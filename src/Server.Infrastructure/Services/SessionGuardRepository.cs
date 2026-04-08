@@ -75,11 +75,12 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
             .Select(agent =>
             {
                 var used = usageByAgent.GetValueOrDefault(agent.AgentId);
-                int? remaining = agent.ChildId is not null && childLookup.TryGetValue(agent.ChildId, out var child)
-                    ? (int?)child.RemainingMinutes
+                var child = agent.ChildId is not null && childLookup.TryGetValue(agent.ChildId, out var resolvedChild)
+                    ? resolvedChild
                     : null;
+                int? remaining = child?.RemainingMinutes;
                 var isOnline = agent.LastSeenAtUtc >= now.AddMinutes(-5);
-                var isLocked = remaining is 0 && used > 0;
+                var isLocked = child?.IsEnabled is true && remaining is 0 && used > 0;
 
                 return new AgentStatusSummary(
                     agent.AgentId,

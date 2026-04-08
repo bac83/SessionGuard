@@ -15,16 +15,6 @@ public interface IEnvironmentReader
     string? GetEnvironmentVariable(string name);
 }
 
-public sealed record SessionState(bool IsActive, bool IsLocked, string? UserName)
-{
-    public static SessionState Inactive(string? userName = null) => new(false, true, userName);
-}
-
-public interface ISessionStateProvider
-{
-    Task<SessionState> GetStateAsync(CancellationToken cancellationToken = default);
-}
-
 public interface IChildAssignmentResolver
 {
     Task<string?> ResolveChildIdAsync(string linuxUserName, CancellationToken cancellationToken = default);

@@ -5,7 +5,6 @@ services:
       dockerfile: src/Server.Api/Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__SessionGuard: Data Source=/data/sessionguard.db
       SessionGuard__Storage__SqlitePath: /data/sessionguard.db
       SessionGuard__Security__ApiKey: change-me
     ports:

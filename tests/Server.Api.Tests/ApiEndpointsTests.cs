@@ -54,6 +54,9 @@ public sealed class ApiEndpointsTests
         var response = await client.GetAsync("/api/admin/dashboard");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.NotNull(error);
+        Assert.Equal("api_key_invalid", error!.Error);
 
         client.DefaultRequestHeaders.Add("X-SessionGuard-ApiKey", "secret-key");
         var authorized = await client.GetAsync("/api/admin/dashboard");

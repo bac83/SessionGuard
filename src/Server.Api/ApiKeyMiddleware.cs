@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Shared.Contracts;
 
 namespace Server.Api;
 
@@ -24,7 +25,9 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddlew
         {
             logger.LogWarning("Rejected API request for {Path} because the API key header was missing or invalid.", context.Request.Path);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new { error = "Missing or invalid API key." });
+            await context.Response.WriteAsJsonAsync(
+                new ApiErrorResponse("api_key_invalid", "Missing or invalid API key."),
+                cancellationToken: context.RequestAborted);
             return;
         }
 

@@ -1,3 +1,5 @@
+using Agent.Core;
+
 namespace Agent.Linux;
 
 public sealed class LinuxSessionStateProvider : ISessionStateProvider

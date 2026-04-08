@@ -44,4 +44,35 @@ public sealed class AgentLinuxTests
 
         await commandRunner.Received(1).RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task JsonPolicyStatusStore_OverwritesExistingSnapshot()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-status-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "status.json");
+        var store = new JsonPolicyStatusStore(path);
+
+        var first = new AgentStatusSnapshot(
+            "agent-01",
+            "alice",
+            "child-01",
+            true,
+            false,
+            false,
+            80,
+            10,
+            DateTimeOffset.UtcNow,
+            "v1");
+        var second = first with { UsedMinutes = 25, RemainingMinutes = 65, Message = "v2" };
+
+        await store.SaveAsync(first, CancellationToken.None);
+        await store.SaveAsync(second, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(path);
+        var saved = JsonSerializer.Deserialize(json, SessionGuardJsonContext.Default.AgentStatusSnapshot);
+        Assert.NotNull(saved);
+        Assert.Equal(25, saved!.UsedMinutes);
+        Assert.Equal("v2", saved.Message);
+    }
 }

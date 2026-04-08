@@ -92,6 +92,29 @@ public sealed class RepositoryTests
         Assert.Equal(after, agent.LastSeenAtUtc);
     }
 
+    [Fact]
+    public async Task GetDashboardAsync_DoesNotMarkDisabledChildAsLocked()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-05", "Noah", 90, false), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-05", "kid-laptop", "noah", "child-05", "1.0.0"), CancellationToken.None);
+        await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-05", "child-05", "noah", new DateOnly(2026, 4, 8), 15, now),
+            CancellationToken.None);
+
+        var dashboard = await repository.GetDashboardAsync(CancellationToken.None);
+
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal(0, agent.RemainingMinutes);
+        Assert.False(agent.IsSessionLocked);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-repository-tests", Guid.NewGuid().ToString("N"));

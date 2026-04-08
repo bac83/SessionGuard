@@ -20,11 +20,6 @@ public sealed class JsonPolicyStatusStore(string statusFilePath) : IAgentStatusS
             await JsonSerializer.SerializeAsync(stream, snapshot, SessionGuardJsonContext.Default.AgentStatusSnapshot, cancellationToken);
         }
 
-        if (File.Exists(statusFilePath))
-        {
-            File.Delete(statusFilePath);
-        }
-
-        File.Move(tempFile, statusFilePath);
+        File.Move(tempFile, statusFilePath, overwrite: true);
     }
 }
