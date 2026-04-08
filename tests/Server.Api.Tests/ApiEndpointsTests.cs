@@ -145,6 +145,29 @@ public sealed class ApiEndpointsTests
         Assert.Equal("not_found", error!.Error);
     }
 
+    [Fact]
+    public async Task AgentUsage_WithTrimmedAgentId_IsAccepted()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient();
+
+        var childResponse = await client.PostAsJsonAsync("/api/admin/children", new UpsertChildRequest("child-01", "Sara", 90, true));
+        Assert.Equal(HttpStatusCode.OK, childResponse.StatusCode);
+
+        var registerResponse = await client.PostAsJsonAsync("/api/agent/register", new AgentRegistrationRequest("agent-01", "kid-laptop", "sara", "child-01", "1.0.0"));
+        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
+
+        var usageResponse = await client.PostAsJsonAsync(
+            "/api/agent/usage",
+            new UsageReportRequest(" agent-01 ", "child-01", "sara", new DateOnly(2026, 4, 8), 35, DateTimeOffset.UtcNow));
+
+        Assert.Equal(HttpStatusCode.OK, usageResponse.StatusCode);
+        var usage = await usageResponse.Content.ReadFromJsonAsync<UsageReportResponse>();
+        Assert.NotNull(usage);
+        Assert.Equal("agent-01", usage!.AgentId);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-api-tests", Guid.NewGuid().ToString("N"));

@@ -15,7 +15,9 @@ public static class Program
             .Bind(builder.Configuration.GetSection("SessionGuard:Agent"))
             .PostConfigure(options =>
             {
-                options.AgentId = string.IsNullOrWhiteSpace(options.AgentId) ? Environment.MachineName.ToLowerInvariant() : options.AgentId;
+                options.AgentId = string.IsNullOrWhiteSpace(options.AgentId)
+                    ? Environment.MachineName.ToLowerInvariant()
+                    : options.AgentId.Trim();
                 options.PollIntervalSeconds = options.PollIntervalSeconds <= 0 ? 60 : options.PollIntervalSeconds;
             });
 

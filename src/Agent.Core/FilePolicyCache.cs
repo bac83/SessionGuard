@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Shared.Contracts;
 
@@ -31,5 +33,10 @@ public sealed class FilePolicyCache(string directoryPath) : IPolicyCache
         File.Move(tempPath, path, overwrite: true);
     }
 
-    private string GetPath(string localUser) => Path.Combine(directoryPath, $"{localUser}.policy.json");
+    private string GetPath(string localUser)
+    {
+        var normalizedUser = localUser.Trim();
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedUser)));
+        return Path.Combine(directoryPath, $"{hash}.policy.json");
+    }
 }

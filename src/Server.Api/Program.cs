@@ -93,7 +93,8 @@ agent.MapPost("/usage", async Task<Results<Ok<UsageReportResponse>, NotFound<Api
         return ValidationError("AgentId, ChildId, and a non-negative UsedMinutes are required.");
     }
 
-    if (!await dbContext.Agents.AnyAsync(x => x.AgentId == request.AgentId, cancellationToken))
+    var normalizedAgentId = request.AgentId.Trim();
+    if (!await dbContext.Agents.AnyAsync(x => x.AgentId == normalizedAgentId, cancellationToken))
     {
         return NotFoundError("AgentId is unknown.");
     }
