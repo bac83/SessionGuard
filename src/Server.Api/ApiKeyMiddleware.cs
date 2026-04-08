@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Options;
 using Shared.Contracts;
 
@@ -21,7 +23,8 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddlew
         }
 
         if (!context.Request.Headers.TryGetValue(ApiSecurityOptions.HeaderName, out var providedApiKey)
-            || !string.Equals(providedApiKey.ToString(), configuredApiKey, StringComparison.Ordinal))
+            || providedApiKey.Count != 1
+            || !IsValidApiKey(providedApiKey[0], configuredApiKey))
         {
             logger.LogWarning("Rejected API request for {Path} because the API key header was missing or invalid.", context.Request.Path);
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -32,6 +35,18 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddlew
         }
 
         await next(context);
+    }
+
+    private static bool IsValidApiKey(string? providedApiKey, string configuredApiKey)
+    {
+        if (string.IsNullOrEmpty(providedApiKey))
+        {
+            return false;
+        }
+
+        var providedBytes = Encoding.UTF8.GetBytes(providedApiKey);
+        var configuredBytes = Encoding.UTF8.GetBytes(configuredApiKey);
+        return CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes);
     }
 }
 

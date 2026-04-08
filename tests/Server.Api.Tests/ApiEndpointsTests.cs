@@ -64,6 +64,24 @@ public sealed class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task ApiKey_WithMultipleHeaderValues_IsRejected()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath, "secret-key");
+        using var client = factory.CreateClient();
+
+        client.DefaultRequestHeaders.Add("X-SessionGuard-ApiKey", "secret-key");
+        client.DefaultRequestHeaders.Add("X-SessionGuard-ApiKey", "second-value");
+
+        var response = await client.GetAsync("/api/admin/dashboard");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.NotNull(error);
+        Assert.Equal("api_key_invalid", error!.Error);
+    }
+
+    [Fact]
     public async Task AdminChildrenValidation_ReturnsApiErrorResponse()
     {
         var sqlitePath = CreateSqlitePath();

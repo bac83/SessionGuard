@@ -126,9 +126,11 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
 
     public async Task<PolicyFetchResponse> GetPolicyAsync(string agentId, string? childId, CancellationToken cancellationToken)
     {
+        var normalizedAgentId = agentId.Trim();
+        var normalizedChildId = childId?.Trim();
         var now = timeProvider.GetUtcNow();
-        var agent = await dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == agentId, cancellationToken);
-        var resolvedChildId = childId ?? agent?.ChildId;
+        var agent = await dbContext.Agents.SingleOrDefaultAsync(x => x.AgentId == normalizedAgentId, cancellationToken);
+        var resolvedChildId = string.IsNullOrWhiteSpace(normalizedChildId) ? agent?.ChildId : normalizedChildId;
         ChildPolicy? policy = null;
 
         if (agent is not null)
@@ -162,7 +164,7 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        return new PolicyFetchResponse(agentId, resolvedChildId, policy, now);
+        return new PolicyFetchResponse(normalizedAgentId, resolvedChildId, policy, now);
     }
 
     public async Task<UsageReportResponse> SaveUsageReportAsync(UsageReportRequest request, CancellationToken cancellationToken)
@@ -187,10 +189,10 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
         existing.ChildId = request.ChildId;
         existing.LocalUser = request.LocalUser;
         existing.UsedMinutes = request.UsedMinutes;
-        existing.ReportedAtUtc = request.ReportedAtUtc;
+        existing.ReportedAtUtc = now;
 
         agent.LastSeenAtUtc = now;
-        agent.LastUsageReportAtUtc = request.ReportedAtUtc;
+        agent.LastUsageReportAtUtc = now;
 
         var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == request.ChildId, cancellationToken);
         int? remainingMinutes = child is null
