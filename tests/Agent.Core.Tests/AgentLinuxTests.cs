@@ -11,9 +11,10 @@ public sealed class AgentLinuxTests
     public async Task ProcessCommandRunner_CapturesStdoutAndStderr()
     {
         var runner = new ProcessCommandRunner();
+        var shell = OperatingSystem.IsWindows() ? "powershell" : "pwsh";
 
         var result = await runner.RunAsync(
-            "powershell",
+            shell,
             "-NoProfile -Command \"[Console]::Out.WriteLine('out'); [Console]::Error.WriteLine('err')\"",
             CancellationToken.None);
 
