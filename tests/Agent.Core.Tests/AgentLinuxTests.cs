@@ -14,7 +14,7 @@ public sealed class AgentLinuxTests
 
         var result = await runner.RunAsync(
             "powershell",
-            "-NoProfile -Command \"Write-Output 'out'; Write-Error 'err'\"",
+            "-NoProfile -Command \"[Console]::Out.WriteLine('out'); [Console]::Error.WriteLine('err')\"",
             CancellationToken.None);
 
         Assert.Contains("out", result.StandardOutput);
