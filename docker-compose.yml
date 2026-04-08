@@ -1,0 +1,29 @@
+services:
+  server-api:
+    build:
+      context: .
+      dockerfile: src/Server.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      SessionGuard__Storage__SqlitePath: /data/sessionguard.db
+      SessionGuard__Security__ApiKey: change-me
+    ports:
+      - "8080:8080"
+    volumes:
+      - sessionguard-data:/data
+
+  server-ui:
+    build:
+      context: .
+      dockerfile: src/Server.Ui/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8081
+      SessionGuard__ApiBaseUrl: http://server-api:8080
+      SessionGuard__ApiKey: change-me
+    ports:
+      - "8081:8081"
+    depends_on:
+      - server-api
+
+volumes:
+  sessionguard-data:

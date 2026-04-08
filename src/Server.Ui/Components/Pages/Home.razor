@@ -1,0 +1,174 @@
+@page "/"
+@using Shared.Contracts
+@inject SessionGuardApiClient ApiClient
+
+<PageTitle>Dashboard</PageTitle>
+
+<section class="hero-panel">
+    <div class="hero-copy">
+        <p class="eyebrow">Control plane</p>
+        <h2>Linux screen-time budgets in one place.</h2>
+        <p class="page-lead">The MVP keeps policy management small: one daily budget per child, agent heartbeat visibility, and offline-safe policy delivery to Linux clients.</p>
+    </div>
+
+    <div class="hero-metrics">
+        <div class="metric-card">
+            <span class="metric-label">Children</span>
+            <strong>@(_dashboard?.Children.Count ?? 0)</strong>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Agents</span>
+            <strong>@(_dashboard?.Agents.Count ?? 0)</strong>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Enabled policies</span>
+            <strong>@(_dashboard?.Children.Count(x => x.IsEnabled) ?? 0)</strong>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Last refresh</span>
+            <strong>@_lastRefreshLabel</strong>
+        </div>
+    </div>
+</section>
+
+<section class="content-grid content-grid--dashboard">
+    <article class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Children</p>
+                <h3>Daily budgets</h3>
+            </div>
+        </div>
+
+        <EditForm Model="_form" OnValidSubmit="SaveChildAsync" class="stacked-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-summary" />
+            <div class="field">
+                <label>Child ID</label>
+                <InputText @bind-Value="_form.ChildId" class="field-input" />
+            </div>
+            <div class="field">
+                <label>Display name</label>
+                <InputText @bind-Value="_form.DisplayName" class="field-input" />
+            </div>
+            <div class="field-row">
+                <div class="field field--inline">
+                    <label>Daily minutes</label>
+                    <InputNumber @bind-Value="_form.DailyLimitMinutes" class="field-input field-input--compact" />
+                </div>
+                <label class="checkbox-field">
+                    <InputCheckbox @bind-Value="_form.IsEnabled" class="checkbox-input" />
+                    Policy enabled
+                </label>
+            </div>
+            <button type="submit" class="primary-button">Save child</button>
+        </EditForm>
+
+        @if (!string.IsNullOrWhiteSpace(_saveMessage))
+        {
+            <p class="status-message status-message--success">@_saveMessage</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <p class="status-message status-message--error">@_errorMessage</p>
+        }
+
+        <div class="summary-list">
+            @foreach (var child in _dashboard?.Children ?? [])
+            {
+                <div class="summary-row">
+                    <div>
+                        <strong>@child.DisplayName</strong>
+                        <div class="summary-row__meta">@child.ChildId</div>
+                    </div>
+                    <div class="summary-row__value">
+                        <span class="badge @(child.IsEnabled ? "badge--success" : "badge--muted")">@(child.IsEnabled ? "Enabled" : "Paused")</span>
+                        <strong>@FormatMinutes(child.DailyLimitMinutes)</strong>
+                    </div>
+                </div>
+            }
+        </div>
+    </article>
+
+    <article class="panel">
+        <div class="panel-heading">
+            <div>
+                <p class="eyebrow">Agents</p>
+                <h3>Recent heartbeat</h3>
+            </div>
+            <button type="button" class="ghost-button" @onclick="LoadDashboardAsync">Refresh</button>
+        </div>
+
+        <div class="summary-list">
+            @foreach (var agent in _dashboard?.Agents ?? [])
+            {
+                <div class="summary-row">
+                    <div>
+                        <strong>@agent.Hostname</strong>
+                        <div class="summary-row__meta">@($"{agent.LocalUser ?? "unassigned"} -> {agent.ChildId ?? "none"}")</div>
+                    </div>
+                    <div class="summary-row__value">
+                        <span class="badge @(agent.IsOnline ? "badge--success" : "badge--danger")">
+                            @(agent.IsOnline ? "Online" : "Offline")
+                        </span>
+                        <strong>@FormatDate(agent.LastSeenAtUtc)</strong>
+                    </div>
+                </div>
+            }
+        </div>
+    </article>
+</section>
+
+@code {
+    private DashboardResponse? _dashboard;
+    private ChildFormModel _form = new();
+    private string? _saveMessage;
+    private string? _errorMessage;
+    private string _lastRefreshLabel = "not loaded";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        _dashboard = await ApiClient.GetDashboardAsync();
+        _lastRefreshLabel = DateTimeOffset.Now.ToString("HH:mm");
+    }
+
+    private async Task SaveChildAsync()
+    {
+        _saveMessage = null;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await ApiClient.SaveChildAsync(new UpsertChildRequest(_form.ChildId, _form.DisplayName, _form.DailyLimitMinutes, _form.IsEnabled));
+            _saveMessage = $"Saved '{result.DisplayName}'.";
+            _form = new ChildFormModel { IsEnabled = true };
+            await LoadDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private static string FormatMinutes(int minutes)
+    {
+        var hours = minutes / 60;
+        var remainder = minutes % 60;
+        return hours == 0 ? $"{remainder} min" : $"{hours}h {remainder:00}m";
+    }
+
+    private static string FormatDate(DateTimeOffset? value) => value?.ToLocalTime().ToString("dd MMM HH:mm") ?? "Never";
+
+    private sealed class ChildFormModel
+    {
+        public string ChildId { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public int DailyLimitMinutes { get; set; } = 60;
+        public bool IsEnabled { get; set; } = true;
+    }
+}

@@ -1,0 +1,27 @@
+using System.Diagnostics;
+
+namespace Agent.Linux;
+
+public sealed class ProcessCommandRunner : ICommandRunner
+{
+    public async Task<CommandResult> RunAsync(string fileName, string arguments, CancellationToken cancellationToken = default)
+    {
+        var startInfo = new ProcessStartInfo(fileName, arguments)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Unable to start '{fileName}'.");
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync();
+        var standardErrorTask = process.StandardError.ReadToEndAsync();
+
+        await Task.WhenAll(standardOutputTask, standardErrorTask).WaitAsync(cancellationToken).ConfigureAwait(false);
+        var standardOutput = await standardOutputTask.ConfigureAwait(false);
+        var standardError = await standardErrorTask.ConfigureAwait(false);
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+        return new CommandResult(process.ExitCode, standardOutput, standardError);
+    }
+}

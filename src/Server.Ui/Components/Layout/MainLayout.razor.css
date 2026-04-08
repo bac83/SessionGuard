@@ -1,0 +1,55 @@
+.app-shell {
+    display: grid;
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+    gap: 1.25rem;
+    min-height: 100vh;
+    padding: 1.25rem;
+}
+
+.sidebar-panel {
+    position: sticky;
+    top: 1.25rem;
+    align-self: start;
+}
+
+.workspace-panel {
+    min-width: 0;
+}
+
+.workspace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.workspace-chip {
+    align-self: flex-start;
+    padding: 0.7rem 1rem;
+    border-radius: 999px;
+    border: 1px solid rgba(32, 44, 58, 0.14);
+    background: rgba(255, 255, 255, 0.72);
+    color: #283241;
+    font-weight: 700;
+    box-shadow: 0 12px 30px rgba(29, 39, 51, 0.08);
+}
+
+.workspace-content {
+    display: grid;
+    gap: 1.25rem;
+}
+
+@media (max-width: 980px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar-panel {
+        position: static;
+    }
+
+    .workspace-header {
+        flex-direction: column;
+    }
+}

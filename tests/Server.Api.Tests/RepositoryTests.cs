@@ -1,0 +1,267 @@
+using Microsoft.EntityFrameworkCore;
+using NSubstitute;
+using Server.Infrastructure.Persistence;
+using Server.Infrastructure.Services;
+using Shared.Contracts;
+
+namespace Server.Api.Tests;
+
+public sealed class RepositoryTests
+{
+    [Fact]
+    public async Task SaveUsageReport_ComputesRemainingMinutesFromSQLiteState()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-01", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-01", "kid-laptop", "sara", "child-01", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-01", "child-01", "sara", new DateOnly(2026, 4, 8), 35, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Equal("agent-01", response.AgentId);
+        Assert.Equal(35, response.UsedMinutes);
+        Assert.Equal(55, response.RemainingMinutes);
+    }
+
+    [Fact]
+    public async Task SaveUsageReport_ReturnsZeroRemainingForDisabledChild()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-02", "Sara", 90, false), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-02", "kid-laptop", "sara", "child-02", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-02", "child-02", "sara", new DateOnly(2026, 4, 8), 35, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        Assert.Equal(0, response.RemainingMinutes);
+    }
+
+    [Fact]
+    public async Task SaveUsageReport_UsesServerTimestampForOrderingAndAgentHeartbeat()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-07", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-07", "kid-laptop", "sara", "child-07", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-07", "child-07", "sara", new DateOnly(2026, 4, 8), 35, now.AddDays(5)),
+            CancellationToken.None);
+
+        var storedReport = await dbContext.UsageReports.SingleAsync();
+        var storedAgent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-07");
+
+        Assert.Equal(now, storedReport.ReportedAtUtc);
+        Assert.Equal(now, storedAgent.LastUsageReportAtUtc);
+        Assert.Equal(now, response.AcceptedAtUtc);
+    }
+
+    [Fact]
+    public async Task SaveUsageReport_TrimsAgentIdAndChildIdBeforeLookupAndSave()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-09", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-09", "kid-laptop", "sara", "child-09", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.SaveUsageReportAsync(
+            new UsageReportRequest(" agent-09 ", " child-09 ", "sara", new DateOnly(2026, 4, 8), 35, now),
+            CancellationToken.None);
+
+        var storedReport = await dbContext.UsageReports.SingleAsync();
+
+        Assert.Equal("agent-09", response.AgentId);
+        Assert.Equal("child-09", response.ChildId);
+        Assert.Equal("agent-09", storedReport.AgentId);
+        Assert.Equal("child-09", storedReport.ChildId);
+    }
+
+    [Fact]
+    public async Task UpsertChildAsync_ReturnsCurrentUsageAndRemainingMinutes()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(
+            new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-03", "Mila", 120, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-03", "kid-laptop", "mila", "child-03", "1.0.0"), CancellationToken.None);
+        await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-03", "child-03", "mila", new DateOnly(2026, 4, 8), 50, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        var updated = await repository.UpsertChildAsync(new UpsertChildRequest("child-03", "Mila", 100, true), CancellationToken.None);
+
+        Assert.Equal(50, updated.CurrentUsageMinutes);
+        Assert.Equal(50, updated.RemainingMinutes);
+    }
+
+    [Fact]
+    public async Task UpsertChildAsync_TrimsChildIdBeforeLookupAndSave()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(
+            new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-06", "Mila", 120, true), CancellationToken.None);
+        var updated = await repository.UpsertChildAsync(new UpsertChildRequest(" child-06 ", "Mila", 100, true), CancellationToken.None);
+
+        Assert.Equal("child-06", updated.ChildId);
+        Assert.Single(await dbContext.Children.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RegisterAgentAsync_TrimsAgentIdBeforeLookupAndSave()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(
+            new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 9, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-06", "Mila", 120, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-06", "kid-laptop", "mila", "child-06", "1.0.0"), CancellationToken.None);
+        var updated = await repository.RegisterAgentAsync(new AgentRegistrationRequest(" agent-06 ", "kid-laptop", "mila", "child-06", "1.0.0"), CancellationToken.None);
+
+        Assert.Equal("agent-06", updated.AgentId);
+        Assert.Single(await dbContext.Agents.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RegisterAgentAsync_TrimsChildIdAndLocalUserAndTreatsWhitespaceAsNull()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        timeProvider.GetUtcNow().Returns(new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero));
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-10", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-10", "kid-laptop", " sara ", " child-10 ", "1.0.0"), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-11", "kid-laptop", "   ", "   ", "1.0.1"), CancellationToken.None);
+
+        var trimmedAgent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-10");
+        var whitespaceAgent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-11");
+
+        Assert.Equal("sara", trimmedAgent.LocalUser);
+        Assert.Equal("child-10", trimmedAgent.ChildId);
+        Assert.Null(whitespaceAgent.LocalUser);
+        Assert.Null(whitespaceAgent.ChildId);
+    }
+
+    [Fact]
+    public async Task GetPolicyAsync_UpdatesHeartbeatEvenWithoutPolicy()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var before = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        var after = new DateTimeOffset(2026, 4, 8, 8, 5, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(before, after);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-04", "kid-laptop", "mila", null, "1.0.0"), CancellationToken.None);
+
+        var response = await repository.GetPolicyAsync("agent-04", "missing-child", CancellationToken.None);
+        var agent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-04");
+
+        Assert.Null(response.Policy);
+        Assert.Equal(after, agent.LastSeenAtUtc);
+    }
+
+    [Fact]
+    public async Task GetPolicyAsync_TrimsAgentIdAndChildIdBeforeLookup()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var registeredAt = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        var fetchedAt = new DateTimeOffset(2026, 4, 8, 8, 5, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(registeredAt, fetchedAt);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-08", "Mila", 120, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-08", "kid-laptop", "mila", "child-08", "1.0.0"), CancellationToken.None);
+
+        var response = await repository.GetPolicyAsync(" agent-08 ", " child-08 ", CancellationToken.None);
+        var agent = await dbContext.Agents.SingleAsync(x => x.AgentId == "agent-08");
+
+        Assert.Equal("agent-08", response.AgentId);
+        Assert.Equal("child-08", response.ChildId);
+        Assert.NotNull(response.Policy);
+        Assert.Equal(fetchedAt, agent.LastSeenAtUtc);
+    }
+
+    [Fact]
+    public async Task GetDashboardAsync_DoesNotMarkDisabledChildAsLocked()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-05", "Noah", 90, false), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-05", "kid-laptop", "noah", "child-05", "1.0.0"), CancellationToken.None);
+        await repository.SaveUsageReportAsync(
+            new UsageReportRequest("agent-05", "child-05", "noah", new DateOnly(2026, 4, 8), 15, now),
+            CancellationToken.None);
+
+        var dashboard = await repository.GetDashboardAsync(CancellationToken.None);
+
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal(0, agent.RemainingMinutes);
+        Assert.False(agent.IsSessionLocked);
+    }
+
+    private static string CreateSqlitePath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "sessionguard-repository-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return Path.Combine(root, "sessionguard.db");
+    }
+
+    private static SessionGuardDbContext CreateDbContext(string sqlitePath)
+    {
+        var options = new DbContextOptionsBuilder<SessionGuardDbContext>()
+            .UseSqlite($"Data Source={sqlitePath}")
+            .Options;
+
+        var dbContext = new SessionGuardDbContext(options);
+        dbContext.Database.EnsureCreated();
+        return dbContext;
+    }
+}
