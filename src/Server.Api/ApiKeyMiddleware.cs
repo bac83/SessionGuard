@@ -46,6 +46,11 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddlew
 
         var providedBytes = Encoding.UTF8.GetBytes(providedApiKey);
         var configuredBytes = Encoding.UTF8.GetBytes(configuredApiKey);
+        if (providedBytes.Length != configuredBytes.Length)
+        {
+            return false;
+        }
+
         return CryptographicOperations.FixedTimeEquals(providedBytes, configuredBytes);
     }
 }

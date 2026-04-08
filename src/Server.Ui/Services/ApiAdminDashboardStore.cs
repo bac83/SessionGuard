@@ -20,9 +20,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
             new UpsertChildRequest(draft.ChildId.Trim(), draft.DisplayName.Trim(), draft.DailyBudgetMinutes, draft.IsActive),
             cancellationToken);
 
-        return child is null
-            ? throw new InvalidOperationException("The server rejected the child profile.")
-            : MapChild(child);
+        return MapChild(child);
     }
 
     public async Task<ChildProfile> UpdateChildBudgetAsync(string childId, int dailyBudgetMinutes, CancellationToken cancellationToken = default)
@@ -35,9 +33,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
             new UpsertChildRequest(existing.ChildId, existing.DisplayName, dailyBudgetMinutes, existing.IsActive),
             cancellationToken);
 
-        return child is null
-            ? throw new InvalidOperationException("The server rejected the budget update.")
-            : MapChild(child);
+        return MapChild(child);
     }
 
     public async Task<ChildProfile> SetChildActiveAsync(string childId, bool isActive, CancellationToken cancellationToken = default)
@@ -50,9 +46,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
             new UpsertChildRequest(existing.ChildId, existing.DisplayName, existing.DailyBudgetMinutes, isActive),
             cancellationToken);
 
-        return child is null
-            ? throw new InvalidOperationException("The server rejected the activation update.")
-            : MapChild(child);
+        return MapChild(child);
     }
 
     private static ChildProfile MapChild(ChildSummary child)
