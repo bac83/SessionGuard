@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Server.Infrastructure.Persistence;
 using Shared.Contracts;
@@ -140,7 +141,7 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
             var child = await dbContext.Children.SingleOrDefaultAsync(x => x.ChildId == resolvedChildId, cancellationToken);
             if (child is not null)
             {
-                var version = child.UpdatedAtUtc.ToUnixTimeSeconds().ToString();
+                var version = child.UpdatedAtUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
                 policy = new ChildPolicy(
                     child.ChildId,
                     child.DailyLimitMinutes,

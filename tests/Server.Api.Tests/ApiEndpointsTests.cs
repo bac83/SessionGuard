@@ -63,6 +63,53 @@ public sealed class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.OK, authorized.StatusCode);
     }
 
+    [Fact]
+    public async Task AdminChildrenValidation_ReturnsApiErrorResponse()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/admin/children", new UpsertChildRequest("", "", -1, true));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.NotNull(error);
+        Assert.Equal("validation_failed", error!.Error);
+    }
+
+    [Fact]
+    public async Task AgentRegisterValidation_ReturnsApiErrorResponse()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/agent/register", new AgentRegistrationRequest("", "", "sara", "child-01", "1.0.0"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.NotNull(error);
+        Assert.Equal("validation_failed", error!.Error);
+    }
+
+    [Fact]
+    public async Task AgentUsageUnknownAgent_ReturnsApiErrorResponse()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/agent/usage",
+            new UsageReportRequest("missing-agent", "child-01", "sara", new DateOnly(2026, 4, 8), 10, DateTimeOffset.UtcNow));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.NotNull(error);
+        Assert.Equal("not_found", error!.Error);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-api-tests", Guid.NewGuid().ToString("N"));
