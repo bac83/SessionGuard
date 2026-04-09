@@ -54,24 +54,35 @@ public sealed class LocalUsageTracker : IUsageTracker
             return;
         }
 
-        _loaded = true;
         if (!File.Exists(_stateFilePath))
         {
+            _loaded = true;
             return;
         }
 
-        await using var stream = File.OpenRead(_stateFilePath);
-        var file = await JsonSerializer.DeserializeAsync<UsageStateFile>(stream, _serializerOptions, cancellationToken);
-        if (file?.Users is null)
+        try
         {
-            return;
+            await using var stream = File.OpenRead(_stateFilePath);
+            var file = await JsonSerializer.DeserializeAsync<UsageStateFile>(stream, _serializerOptions, cancellationToken);
+            if (file?.Users is not null)
+            {
+                _state.Clear();
+                foreach (var entry in file.Users)
+                {
+                    _state[entry.Key] = entry.Value;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            _state.Clear();
+        }
+        catch (JsonException)
+        {
+            _state.Clear();
         }
 
-        _state.Clear();
-        foreach (var entry in file.Users)
-        {
-            _state[entry.Key] = entry.Value;
-        }
+        _loaded = true;
     }
 
     private async Task SaveAsync(CancellationToken cancellationToken)

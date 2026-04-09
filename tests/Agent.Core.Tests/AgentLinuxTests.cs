@@ -163,6 +163,23 @@ public sealed class AgentLinuxTests
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 9), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task LocalUsageTracker_TreatsCorruptedStateFileAsEmptyState()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(Path.Combine(directory, "usage-state.json"), "{ not valid json");
+
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero));
+        var tracker = new LocalUsageTracker(timeProvider, options);
+
+        var used = await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None);
+
+        Assert.Equal(0, used);
+    }
+
     private sealed class SequenceTimeProvider(params DateTimeOffset[] values) : TimeProvider
     {
         private readonly Queue<DateTimeOffset> _values = new(values);
