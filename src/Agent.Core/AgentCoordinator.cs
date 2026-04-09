@@ -32,7 +32,7 @@ public sealed class AgentCoordinator(
                 var evaluation = policyEvaluator.Evaluate(response.Policy, usedMinutes);
                 UsageReportResponse? usageResponse = null;
 
-                if (response.Policy is not null)
+                if (response.Policy is not null && !response.IsFromCache)
                 {
                     usageResponse = await policyClient.ReportUsageAsync(
                         new UsageReportRequest(
