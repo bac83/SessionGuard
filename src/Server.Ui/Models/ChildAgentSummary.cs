@@ -8,7 +8,7 @@ public static class ChildAgentSummaryBuilder
 {
     public static ChildAgentSummary Build(DashboardSnapshot? snapshot, string childId)
     {
-        var agents = snapshot?.Agents
+        var agents = snapshot?.Agents?
             .Where(agent => string.Equals(agent.ChildId, childId, StringComparison.OrdinalIgnoreCase))
             .OrderBy(agent => agent.HostName, StringComparer.OrdinalIgnoreCase)
             .ToArray()

@@ -34,15 +34,22 @@ public sealed class AgentCoordinator(
 
                 if (response.Policy is not null && !response.IsFromCache)
                 {
-                    usageResponse = await policyClient.ReportUsageAsync(
-                        new UsageReportRequest(
-                            options.AgentId,
-                            mapping.ChildId,
-                            mapping.LocalUser,
-                            usageDateUtc,
-                            evaluation.UsedMinutes,
-                            now),
-                        cancellationToken);
+                    try
+                    {
+                        usageResponse = await policyClient.ReportUsageAsync(
+                            new UsageReportRequest(
+                                options.AgentId,
+                                mapping.ChildId,
+                                mapping.LocalUser,
+                                usageDateUtc,
+                                evaluation.UsedMinutes,
+                                now),
+                            cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Usage reporting failed for local user {LocalUser}", mapping.LocalUser);
+                    }
                 }
 
                 var shouldLock = evaluation.ShouldLock || usageResponse?.RemainingMinutes is 0;

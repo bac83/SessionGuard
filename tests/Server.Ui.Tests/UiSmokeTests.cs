@@ -97,6 +97,15 @@ public sealed class UiSmokeTests
         Assert.Equal("Awaiting agent", summary.StatusLabel);
     }
 
+    [Fact]
+    public void ChildAgentSummaryBuilder_ReturnsAwaitingAgentWhenSnapshotIsNull()
+    {
+        var summary = ChildAgentSummaryBuilder.Build(null, "child-02");
+
+        Assert.Empty(summary.Agents);
+        Assert.Equal("Awaiting agent", summary.StatusLabel);
+    }
+
     private sealed class StubMessageHandler(string payload, HttpStatusCode statusCode = HttpStatusCode.OK) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
