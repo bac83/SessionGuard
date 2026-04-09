@@ -38,7 +38,12 @@ public sealed class LocalUsageTracker : IUsageTracker
             var elapsedMinutes = Math.Max((int)Math.Floor((now - current.LastSeen).TotalMinutes), 0);
             var used = current.UsedMinutes + elapsedMinutes;
             _state[mapping.LocalUser] = new UsageStateEntry(usageDateUtc, now, used);
-            await SaveAsync(cancellationToken);
+
+            if (elapsedMinutes > 0)
+            {
+                await SaveAsync(cancellationToken);
+            }
+
             return used;
         }
         finally

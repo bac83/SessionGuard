@@ -180,6 +180,40 @@ public sealed class AgentLinuxTests
         Assert.Equal(0, used);
     }
 
+    [Fact]
+    public async Task LocalUsageTracker_DoesNotPersistWhenElapsedMinutesIsZero()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 0, 30, TimeSpan.Zero));
+        var tracker = new LocalUsageTracker(timeProvider, options);
+
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        var persistedAfterFirstPoll = await ReadPersistedLastSeenAsync(directory);
+
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        var persistedAfterSecondPoll = await ReadPersistedLastSeenAsync(directory);
+
+        Assert.Equal(persistedAfterFirstPoll, persistedAfterSecondPoll);
+    }
+
+    private static async Task<DateTimeOffset?> ReadPersistedLastSeenAsync(string directory)
+    {
+        var path = Path.Combine(directory, "usage-state.json");
+        await using var stream = File.OpenRead(path);
+        using var document = await JsonDocument.ParseAsync(stream);
+        var rawValue = document.RootElement
+            .GetProperty("users")
+            .GetProperty("alice")
+            .GetProperty("lastSeen")
+            .GetString();
+
+        return rawValue is null ? null : DateTimeOffset.Parse(rawValue);
+    }
+
     private sealed class SequenceTimeProvider(params DateTimeOffset[] values) : TimeProvider
     {
         private readonly Queue<DateTimeOffset> _values = new(values);
