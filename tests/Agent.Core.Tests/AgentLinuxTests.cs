@@ -124,4 +124,57 @@ public sealed class AgentLinuxTests
         Assert.Equal(25, saved!.UsedMinutes);
         Assert.Equal("v2", saved.Message);
     }
+
+    [Fact]
+    public async Task LocalUsageTracker_PersistsUsedMinutesAcrossRestart()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var day = new DateOnly(2026, 4, 8);
+        var firstTimeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero));
+        var secondTimeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 10, 0, TimeSpan.Zero));
+
+        var firstTracker = new LocalUsageTracker(firstTimeProvider, options);
+        Assert.Equal(0, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
+        Assert.Equal(5, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
+
+        var secondTracker = new LocalUsageTracker(secondTimeProvider, options);
+        Assert.Equal(10, await secondTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LocalUsageTracker_ResetsWhenUsageDayChanges()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 9, 0, 1, 0, TimeSpan.Zero));
+
+        var tracker = new LocalUsageTracker(timeProvider, options);
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 9), CancellationToken.None));
+    }
+
+    private sealed class SequenceTimeProvider(params DateTimeOffset[] values) : TimeProvider
+    {
+        private readonly Queue<DateTimeOffset> _values = new(values);
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (_values.Count == 0)
+            {
+                throw new InvalidOperationException("No more timestamps available.");
+            }
+
+            return _values.Dequeue();
+        }
+    }
 }

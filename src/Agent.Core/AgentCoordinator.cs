@@ -30,8 +30,25 @@ public sealed class AgentCoordinator(
                 var response = await TryFetchPolicyAsync(mapping, now, cancellationToken);
                 var usedMinutes = await usageTracker.GetUsedMinutesAsync(mapping, usageDateUtc, cancellationToken);
                 var evaluation = policyEvaluator.Evaluate(response.Policy, usedMinutes);
+                UsageReportResponse? usageResponse = null;
 
-                if (evaluation.ShouldLock)
+                if (response.Policy is not null)
+                {
+                    usageResponse = await policyClient.ReportUsageAsync(
+                        new UsageReportRequest(
+                            options.AgentId,
+                            mapping.ChildId,
+                            mapping.LocalUser,
+                            usageDateUtc,
+                            evaluation.UsedMinutes,
+                            now),
+                        cancellationToken);
+                }
+
+                var shouldLock = evaluation.ShouldLock || usageResponse?.RemainingMinutes is 0;
+                var remainingMinutes = usageResponse?.RemainingMinutes ?? evaluation.RemainingMinutes;
+
+                if (shouldLock)
                 {
                     await sessionController.LockAsync(mapping, cancellationToken);
                 }
@@ -42,27 +59,14 @@ public sealed class AgentCoordinator(
                     mapping.ChildId,
                     response.Policy is not null,
                     response.IsFromCache,
-                    evaluation.ShouldLock,
-                    evaluation.RemainingMinutes,
+                    shouldLock,
+                    remainingMinutes,
                     evaluation.UsedMinutes,
                     now,
                     response.Policy is null ? "No valid policy available." : null);
 
                 snapshots.Add(snapshot);
                 await agentStatusStore.SaveAsync(snapshot, cancellationToken);
-
-                if (response.Policy is not null)
-                {
-                    await policyClient.ReportUsageAsync(
-                        new UsageReportRequest(
-                            options.AgentId,
-                            mapping.ChildId,
-                            mapping.LocalUser,
-                            usageDateUtc,
-                            evaluation.UsedMinutes,
-                            now),
-                        cancellationToken);
-                }
             }
             catch (Exception ex)
             {

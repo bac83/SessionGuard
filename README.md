@@ -8,7 +8,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Example `docker-compose.yml`
 - Linux agent that polls for policy updates and caches the last valid policy offline
 - Local `user -> child_id` mapping on the agent
-- Usage tracking, remaining time display, and session lock on expiry
+- Usage tracking, remaining time display, persisted local usage state, and session lock on expiry or admin pause
 - GitHub CI/CD
 - Linux agent installation guide
 
@@ -41,6 +41,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - `docs/install-linux-agent.md`
 - `docs/operations.md`
 - `docker-compose.yml`
+- `docker-compose.build.yml`
 
 ## Technical rules
 - Keep server and agent as separate deployables
@@ -77,3 +78,9 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Linux agent service
 - Agent install documentation
 - CI/CD workflows
+
+## Docker Compose usage
+- Default: `docker compose up -d` pulls the published `main` images from GHCR.
+- Override the image owner with `SESSIONGUARD_IMAGE_OWNER` if you publish from a fork or another org.
+- Override the tag if needed with `SESSIONGUARD_IMAGE_TAG`, for example `v1.0.0`.
+- Local fallback build: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`
