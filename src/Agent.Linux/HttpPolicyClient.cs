@@ -42,9 +42,11 @@ public sealed class HttpPolicyClient : IPolicyClient
                ?? new PolicyFetchResponse(_agentOptions.AgentId, mapping.ChildId, null, DateTimeOffset.UtcNow);
     }
 
-    public async Task ReportUsageAsync(UsageReportRequest request, CancellationToken cancellationToken)
+    public async Task<UsageReportResponse> ReportUsageAsync(UsageReportRequest request, CancellationToken cancellationToken)
     {
         using var response = await _httpClient.PostAsJsonAsync("/api/agent/usage", request, cancellationToken);
         response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<UsageReportResponse>(cancellationToken)
+               ?? new UsageReportResponse(request.AgentId, request.ChildId, request.UsedMinutes, null, DateTimeOffset.UtcNow);
     }
 }

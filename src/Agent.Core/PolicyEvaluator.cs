@@ -6,9 +6,14 @@ public sealed class PolicyEvaluator
 {
     public PolicyEvaluationResult Evaluate(ChildPolicy? policy, int usedMinutes)
     {
-        if (policy is null || !policy.IsEnabled)
+        if (policy is null)
         {
             return new PolicyEvaluationResult(usedMinutes, null, false);
+        }
+
+        if (!policy.IsEnabled)
+        {
+            return new PolicyEvaluationResult(usedMinutes, 0, true);
         }
 
         var remaining = Math.Max(policy.DailyLimitMinutes - usedMinutes, 0);

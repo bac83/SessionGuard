@@ -6,7 +6,7 @@ public interface IPolicyClient
 {
     Task RegisterAsync(UserChildMapping mapping, CancellationToken cancellationToken);
     Task<PolicyFetchResponse> FetchPolicyAsync(UserChildMapping mapping, CancellationToken cancellationToken);
-    Task ReportUsageAsync(UsageReportRequest request, CancellationToken cancellationToken);
+    Task<UsageReportResponse> ReportUsageAsync(UsageReportRequest request, CancellationToken cancellationToken);
 }
 
 public interface IPolicyCache

@@ -225,7 +225,7 @@ public sealed class RepositoryTests
     }
 
     [Fact]
-    public async Task GetDashboardAsync_DoesNotMarkDisabledChildAsLocked()
+    public async Task GetDashboardAsync_MarksDisabledChildAsLocked()
     {
         var sqlitePath = CreateSqlitePath();
         await using var dbContext = CreateDbContext(sqlitePath);
@@ -244,7 +244,7 @@ public sealed class RepositoryTests
 
         var agent = Assert.Single(dashboard.Agents);
         Assert.Equal(0, agent.RemainingMinutes);
-        Assert.False(agent.IsSessionLocked);
+        Assert.True(agent.IsSessionLocked);
     }
 
     private static string CreateSqlitePath()

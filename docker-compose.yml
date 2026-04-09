@@ -1,8 +1,8 @@
 services:
   server-api:
-    build:
-      context: .
-      dockerfile: src/Server.Api/Dockerfile
+    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server-api:${SESSIONGUARD_IMAGE_TAG:-main}
+    pull_policy: always
+    restart: unless-stopped
     environment:
       ASPNETCORE_URLS: http://+:8080
       SessionGuard__Storage__SqlitePath: /data/sessionguard.db
@@ -13,9 +13,9 @@ services:
       - sessionguard-data:/data
 
   server-ui:
-    build:
-      context: .
-      dockerfile: src/Server.Ui/Dockerfile
+    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server-ui:${SESSIONGUARD_IMAGE_TAG:-main}
+    pull_policy: always
+    restart: unless-stopped
     environment:
       ASPNETCORE_URLS: http://+:8081
       SessionGuard__ApiBaseUrl: http://server-api:8080

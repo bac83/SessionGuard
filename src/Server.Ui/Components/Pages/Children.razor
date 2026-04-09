@@ -89,6 +89,7 @@
                 @foreach (var child in _snapshot.Children)
                 {
                     var row = GetBudgetRow(child);
+                    var agentSummary = ChildAgentSummaryBuilder.Build(_snapshot, child.ChildId);
                     <article class="profile-card">
                         <div class="profile-card__header">
                             <div>
@@ -108,6 +109,24 @@
                             <div>
                                 <span class="metric-label">Updated</span>
                                 <strong>@FormatTimestamp(child.UpdatedAtUtc)</strong>
+                            </div>
+                        </div>
+
+                        <div class="profile-card__metrics">
+                            <div>
+                                <span class="metric-label">Agent</span>
+                                @if (agentSummary.Agents.Count == 0)
+                                {
+                                    <strong>No agent assigned</strong>
+                                }
+                                else
+                                {
+                                    <strong>@string.Join(", ", agentSummary.Agents.Select(agent => agent.HostName))</strong>
+                                }
+                            </div>
+                            <div>
+                                <span class="metric-label">Session</span>
+                                <strong>@agentSummary.StatusLabel</strong>
                             </div>
                         </div>
 
