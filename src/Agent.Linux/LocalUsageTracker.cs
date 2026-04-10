@@ -51,7 +51,7 @@ public sealed class LocalUsageTracker : IUsageTracker
             if (elapsedMinutes > 0)
             {
                 await SaveAsync(cancellationToken);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Updated usage for {LocalUser} on {UsageDateUtc}: used={UsedMinutes} min, elapsed={ElapsedMinutes} min; state file {StateFilePath}",
                     mapping.LocalUser,
                     usageDateUtc,

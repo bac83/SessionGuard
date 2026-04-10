@@ -59,7 +59,7 @@ public sealed class AgentCoordinator(
                 var policy = response.Policy;
                 var isLocked = false;
 
-                logger.LogInformation(
+                logger.LogDebug(
                     "Policy decision for {LocalUser}/{ChildId}: policyAvailable={PolicyAvailable}, fromCache={FromCache}, policyVersion={PolicyVersion}, enabled={PolicyEnabled}, dailyLimit={DailyLimitMinutes}, used={UsedMinutes}, remaining={RemainingMinutes}, usageReported={UsageReported}, shouldLock={ShouldLock}",
                     mapping.LocalUser,
                     mapping.ChildId,

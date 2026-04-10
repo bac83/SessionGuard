@@ -52,7 +52,7 @@ chmod 0644 "$STAGING_ROOT/etc/sessionguard/agent.env"
 chmod 0644 "$STAGING_ROOT/etc/xdg/autostart/sessionguard-tray.desktop"
 chmod 0644 "$STAGING_ROOT/usr/share/icons/hicolor/scalable/apps/sessionguard.svg"
 
-dpkg-deb --build "$STAGING_ROOT" "$ARTIFACT_DIR/$PACKAGE_NAME"
+dpkg-deb --build --root-owner-group "$STAGING_ROOT" "$ARTIFACT_DIR/$PACKAGE_NAME"
 dpkg-deb --info "$ARTIFACT_DIR/$PACKAGE_NAME"
 dpkg-deb --contents "$ARTIFACT_DIR/$PACKAGE_NAME" | grep -E "Agent\\.Linux\\.dll|Agent\\.Tray\\.dll|sessionguard-agent\\.service|sessionguard-tray\\.desktop"
 
