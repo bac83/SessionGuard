@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Data.Sqlite;
 using Server.Infrastructure.Persistence;
 using Server.Infrastructure.Services;
 using Server.Infrastructure.Storage;
@@ -64,29 +65,12 @@ public static class DependencyInjection
 
         try
         {
-            var exists = false;
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info({tableName})";
-            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-            {
-                while (await reader.ReadAsync(cancellationToken))
-                {
-                    if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        exists = true;
-                        break;
-                    }
-                }
-            }
-
-            if (exists)
+            if (await ColumnExistsAsync(connection, tableName, columnName, cancellationToken))
             {
                 return;
             }
 
-            await using var alterCommand = connection.CreateCommand();
-            alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}";
-            await alterCommand.ExecuteNonQueryAsync(cancellationToken);
+            await AddColumnAsync(connection, tableName, columnName, columnType, cancellationToken);
         }
         finally
         {
@@ -96,6 +80,67 @@ public static class DependencyInjection
             }
         }
     }
+
+    private static async Task<bool> ColumnExistsAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName})";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task AddColumnAsync(
+        System.Data.Common.DbConnection connection,
+        string tableName,
+        string columnName,
+        string columnType,
+        CancellationToken cancellationToken)
+    {
+        const int maxAttempts = 3;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await using var alterCommand = connection.CreateCommand();
+                alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}";
+                await alterCommand.ExecuteNonQueryAsync(cancellationToken);
+                return;
+            }
+            catch (SqliteException ex) when (IsDuplicateColumn(ex))
+            {
+                if (await ColumnExistsAsync(connection, tableName, columnName, cancellationToken))
+                {
+                    return;
+                }
+
+                throw;
+            }
+            catch (SqliteException ex) when (IsTransientLock(ex) && attempt < maxAttempts)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsDuplicateColumn(SqliteException exception) =>
+        exception.SqliteErrorCode == 1
+        && exception.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTransientLock(SqliteException exception) =>
+        exception.SqliteErrorCode is 5 or 6;
 
     private static void ValidateSqliteIdentifier(string value)
     {

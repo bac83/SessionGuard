@@ -92,7 +92,7 @@ static async Task<AgentStatusSnapshot?> ReadSnapshotAsync(string statusFilePath)
         await using var stream = File.OpenRead(statusFilePath);
         return await JsonSerializer.DeserializeAsync(stream, SessionGuardJsonContext.Default.AgentStatusSnapshot);
     }
-    catch (Exception ex) when (ex is IOException or JsonException)
+    catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or System.Security.SecurityException)
     {
         return null;
     }
