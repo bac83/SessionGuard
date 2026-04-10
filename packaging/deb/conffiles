@@ -1,3 +1,2 @@
 /etc/sessionguard/agent.env
 /etc/xdg/autostart/sessionguard-tray.desktop
-/etc/systemd/system/sessionguard-agent.service

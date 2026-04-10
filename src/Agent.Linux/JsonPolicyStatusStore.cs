@@ -11,10 +11,15 @@ public sealed class JsonPolicyStatusStore(string statusFilePath) : IAgentStatusS
         var directory = Path.GetDirectoryName(statusFilePath);
         if (!string.IsNullOrWhiteSpace(directory))
         {
+            var directoryExists = Directory.Exists(directory);
             Directory.CreateDirectory(directory);
-            SetUnixMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            if (!directoryExists)
+            {
+                SetUnixMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
         }
 
+        var fileExists = File.Exists(statusFilePath);
         var tempFile = $"{statusFilePath}.{Guid.NewGuid():N}.tmp";
         await using (var stream = File.Create(tempFile))
         {
@@ -22,7 +27,10 @@ public sealed class JsonPolicyStatusStore(string statusFilePath) : IAgentStatusS
         }
 
         File.Move(tempFile, statusFilePath, overwrite: true);
-        SetUnixMode(statusFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        if (!fileExists)
+        {
+            SetUnixMode(statusFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        }
     }
 
     private static void SetUnixMode(string path, UnixFileMode mode)

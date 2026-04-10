@@ -3,7 +3,7 @@ Version: @VERSION@
 Section: utils
 Priority: optional
 Architecture: @ARCH@
-Depends: dotnet-runtime-10.0 | dotnet-runtime-9.0 | dotnet-runtime-8.0, systemd, yad
+Depends: dotnet-runtime-10.0, systemd, yad
 Maintainer: SessionGuard Maintainers <maintainers@example.invalid>
 Description: SessionGuard Linux screen-time agent
  Centralized Linux screen-time management agent and user-session tray status UI.

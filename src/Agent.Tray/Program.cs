@@ -34,9 +34,17 @@ static async Task RunTrayAsync(string statusFilePath, TimeSpan interval)
         var tooltip = BuildTooltip(snapshot, statusFilePath).Replace("\r", " ").Replace("\n", "\\n");
         var icon = snapshot?.IsLocked is true ? "dialog-warning" : "sessionguard";
 
-        await yad.StandardInput.WriteLineAsync($"icon:{icon}");
-        await yad.StandardInput.WriteLineAsync($"tooltip:{tooltip}");
-        await yad.StandardInput.FlushAsync();
+        try
+        {
+            await yad.StandardInput.WriteLineAsync($"icon:{icon}");
+            await yad.StandardInput.WriteLineAsync($"tooltip:{tooltip}");
+            await yad.StandardInput.FlushAsync();
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException or IOException)
+        {
+            break;
+        }
+
         await Task.Delay(interval);
     }
 }
@@ -73,8 +81,15 @@ static async Task<AgentStatusSnapshot?> ReadSnapshotAsync(string statusFilePath)
         return null;
     }
 
-    await using var stream = File.OpenRead(statusFilePath);
-    return await JsonSerializer.DeserializeAsync(stream, SessionGuardJsonContext.Default.AgentStatusSnapshot);
+    try
+    {
+        await using var stream = File.OpenRead(statusFilePath);
+        return await JsonSerializer.DeserializeAsync(stream, SessionGuardJsonContext.Default.AgentStatusSnapshot);
+    }
+    catch (Exception ex) when (ex is IOException or JsonException)
+    {
+        return null;
+    }
 }
 
 static void PrintStatus(AgentStatusSnapshot? snapshot)
