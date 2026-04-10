@@ -1,6 +1,7 @@
 using Agent.Core;
 using Microsoft.Extensions.Logging;
 using Shared.Contracts;
+using System.Security;
 using System.Text.Json;
 
 namespace Agent.Linux;
@@ -108,6 +109,11 @@ public sealed class LocalUsageTracker : IUsageTracker
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Usage state file {StateFilePath} is invalid JSON; starting empty", _stateFilePath);
+            _state.Clear();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException)
+        {
+            _logger.LogWarning(ex, "Usage state file {StateFilePath} is not readable due to permissions; starting empty", _stateFilePath);
             _state.Clear();
         }
 
