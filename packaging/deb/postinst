@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+set -e
+
+mkdir -p /etc/sessionguard
+mkdir -p /var/lib/sessionguard/cache
+mkdir -p /var/lib/sessionguard/status
+chmod 755 /etc/sessionguard
+chmod 700 /var/lib/sessionguard/cache
+
+if ! getent group sessionguard >/dev/null 2>&1; then
+  if command -v addgroup >/dev/null 2>&1; then
+    addgroup --system sessionguard >/dev/null
+  else
+    groupadd --system sessionguard >/dev/null
+  fi
+fi
+
+chgrp sessionguard /var/lib/sessionguard/status
+chmod 2750 /var/lib/sessionguard/status
+if [ -f /var/lib/sessionguard/status/agent-status.json ]; then
+  chgrp sessionguard /var/lib/sessionguard/status/agent-status.json
+  chmod 640 /var/lib/sessionguard/status/agent-status.json
+fi
+
+if [ ! -f /etc/sessionguard/user-map.json ]; then
+  cat > /etc/sessionguard/user-map.json <<'EOF'
+{
+  "linux-user": "child-id"
+}
+EOF
+  chmod 644 /etc/sessionguard/user-map.json
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable sessionguard-agent.service >/dev/null 2>&1 || true
+  systemctl restart sessionguard-agent.service >/dev/null 2>&1 || true
+fi
+
+exit 0

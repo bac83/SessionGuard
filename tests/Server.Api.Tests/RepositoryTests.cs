@@ -182,6 +182,25 @@ public sealed class RepositoryTests
     }
 
     [Fact]
+    public async Task RegisterAgentAsync_StoresAgentVersionAndDashboardReturnsIt()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-11", "Sara", 90, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-11", "kid-laptop", "sara", "child-11", "1.2.3"), CancellationToken.None);
+
+        var dashboard = await repository.GetDashboardAsync(CancellationToken.None);
+
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal("1.2.3", agent.AgentVersion);
+    }
+
+    [Fact]
     public async Task GetPolicyAsync_UpdatesHeartbeatEvenWithoutPolicy()
     {
         var sqlitePath = CreateSqlitePath();
@@ -243,6 +262,27 @@ public sealed class RepositoryTests
         var dashboard = await repository.GetDashboardAsync(CancellationToken.None);
 
         var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal(0, agent.RemainingMinutes);
+        Assert.True(agent.IsSessionLocked);
+    }
+
+    [Fact]
+    public async Task GetDashboardAsync_MarksZeroBudgetChildAsLockedEvenWithoutUsage()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var dbContext = CreateDbContext(sqlitePath);
+        var timeProvider = Substitute.For<TimeProvider>();
+        var now = new DateTimeOffset(2026, 4, 8, 8, 0, 0, TimeSpan.Zero);
+        timeProvider.GetUtcNow().Returns(now);
+        var repository = new SessionGuardRepository(dbContext, timeProvider);
+
+        await repository.UpsertChildAsync(new UpsertChildRequest("child-12", "Noah", 0, true), CancellationToken.None);
+        await repository.RegisterAgentAsync(new AgentRegistrationRequest("agent-12", "kid-laptop", "noah", "child-12", "1.2.3"), CancellationToken.None);
+
+        var dashboard = await repository.GetDashboardAsync(CancellationToken.None);
+
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal(0, agent.UsedMinutesToday);
         Assert.Equal(0, agent.RemainingMinutes);
         Assert.True(agent.IsSessionLocked);
     }

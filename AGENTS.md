@@ -22,7 +22,9 @@ Build a small, production-minded MVP for centralized Linux screen-time managemen
 - Avoid premature abstractions not needed by current scope
 
 ## Subagents
-Use subagents when helpful. Preferred roles:
+For every non-trivial coding task, use subagents unless explicitly impossible.
+At minimum, delegate one review or verification task to a subagent before finalizing.
+Preferred roles:
 - architecture-review
 - server-backend
 - linux-agent
@@ -30,6 +32,8 @@ Use subagents when helpful. Preferred roles:
 - tests
 - ci-cd
 - docs
+
+If subagents are not used, explicitly state why in the final response.
 
 Keep outputs aligned with this file. Resolve conflicts in favor of simplicity and the MVP.
 
@@ -40,16 +44,15 @@ Keep outputs aligned with this file. Resolve conflicts in favor of simplicity an
 - Prefer integration tests for API, persistence, and wiring
 - Do not merge code with failing tests
 
-## PR rules
+## Branch and PR rules
 
-- Every task must be started in a new branch with a descriptive name
-- Keep PRs small and focused
-- Link the issue if one is mentioned
-- Include a short summary, risks, and test notes
-- Include screenshots for UI changes
-- Mention migrations/config changes explicitly
-- Do not mix broad refactors with new features unless required
-- Every update on a PR must be reviewed by `@copilot`
+- Before making any code changes, create or switch to a new branch with prefix `codex/` and a descriptive name.
+- Do not implement code changes directly on `main` or the current user branch unless the user explicitly asks for it.
+- After implementation and successful local verification, commit the changes.
+- Push the branch and open a PR when GitHub credentials/remotes are available.
+- If push or PR creation is not possible, state the blocker and provide the exact branch name, commit status, and recommended PR title/body.
+- Every update on a PR must request a review from `@copilot`.
+- On PR update every comment that has been worked on must be answered and marked as resolved.
 
 ## Definition of done
 A task is done only if:

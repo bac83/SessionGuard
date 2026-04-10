@@ -70,8 +70,8 @@ public sealed class UiSmokeTests
                 new ChildProfile("child-02", "Mila", 120, true, 0, 120, DateTimeOffset.UtcNow)
             ],
             [
-                new AgentStatus("agent-01", "mond", "sara", "child-01", true, false, 15, 75, DateTimeOffset.UtcNow),
-                new AgentStatus("agent-02", "tablet", "sara", "child-01", false, false, 15, 75, DateTimeOffset.UtcNow)
+                new AgentStatus("agent-01", "1.2.3", "mond", "sara", "child-01", true, false, 15, 75, DateTimeOffset.UtcNow),
+                new AgentStatus("agent-02", "1.2.3", "tablet", "sara", "child-01", false, false, 15, 75, DateTimeOffset.UtcNow)
             ],
             DateTimeOffset.UtcNow);
 

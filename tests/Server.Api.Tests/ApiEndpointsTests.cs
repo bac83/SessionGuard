@@ -41,7 +41,8 @@ public sealed class ApiEndpointsTests
         var dashboard = await dashboardResponse.Content.ReadFromJsonAsync<DashboardResponse>();
         Assert.NotNull(dashboard);
         Assert.Single(dashboard!.Children);
-        Assert.Single(dashboard.Agents);
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal("1.0.0", agent.AgentVersion);
     }
 
     [Fact]

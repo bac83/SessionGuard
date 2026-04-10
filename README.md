@@ -9,6 +9,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Linux agent that polls for policy updates and caches the last valid policy offline
 - Local `user -> child_id` mapping on the agent
 - Usage tracking, remaining time display, persisted local usage state, and session lock on expiry or admin pause
+- Versioned Linux agent Debian package with tray autostart support
 - GitHub CI/CD
 - Linux agent installation guide
 
@@ -28,6 +29,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - `Agent.Core`: policy/state logic and offline cache behavior
 - `Agent.Linux`: Linux session, lock, and system integration behind interfaces
 - `Agent.Tray`: small local status UI for the Linux desktop session
+- `packaging/deb`: Debian package assets for the Linux agent and tray autostart
 
 ## Repository layout
 - `src/Server.Api`
@@ -68,6 +70,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 
 ## CI/CD
 - GitHub Actions for build, test, formatting, and Docker image build
+- CI builds a versioned `sessionguard-agent_*_amd64.deb` artifact for workflow testing
 - Publish images and releases only from `main` or tags
 - Keep workflows simple and deterministic
 

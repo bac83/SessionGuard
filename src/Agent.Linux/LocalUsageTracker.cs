@@ -1,5 +1,7 @@
 using Agent.Core;
+using Microsoft.Extensions.Logging;
 using Shared.Contracts;
+using System.Security;
 using System.Text.Json;
 
 namespace Agent.Linux;
@@ -13,9 +15,12 @@ public sealed class LocalUsageTracker : IUsageTracker
     private readonly Dictionary<string, UsageStateEntry> _state = new(StringComparer.OrdinalIgnoreCase);
     private bool _loaded;
 
-    public LocalUsageTracker(TimeProvider timeProvider, AgentLinuxOptions options)
+    private readonly ILogger<LocalUsageTracker> _logger;
+
+    public LocalUsageTracker(TimeProvider timeProvider, AgentLinuxOptions options, ILogger<LocalUsageTracker> logger)
     {
         _timeProvider = timeProvider;
+        _logger = logger;
         _stateFilePath = Path.Combine(options.CacheDirectory, "usage-state.json");
     }
 
@@ -32,6 +37,11 @@ public sealed class LocalUsageTracker : IUsageTracker
             {
                 _state[mapping.LocalUser] = new UsageStateEntry(usageDateUtc, now, 0);
                 await SaveAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Started usage tracking for {LocalUser} on {UsageDateUtc}; state file {StateFilePath}",
+                    mapping.LocalUser,
+                    usageDateUtc,
+                    _stateFilePath);
                 return 0;
             }
 
@@ -42,6 +52,13 @@ public sealed class LocalUsageTracker : IUsageTracker
             if (elapsedMinutes > 0)
             {
                 await SaveAsync(cancellationToken);
+                _logger.LogDebug(
+                    "Updated usage for {LocalUser} on {UsageDateUtc}: used={UsedMinutes} min, elapsed={ElapsedMinutes} min; state file {StateFilePath}",
+                    mapping.LocalUser,
+                    usageDateUtc,
+                    used,
+                    elapsedMinutes,
+                    _stateFilePath);
             }
 
             return used;
@@ -62,6 +79,7 @@ public sealed class LocalUsageTracker : IUsageTracker
         if (!File.Exists(_stateFilePath))
         {
             _loaded = true;
+            _logger.LogInformation("No usage state file found at {StateFilePath}; starting empty", _stateFilePath);
             return;
         }
 
@@ -76,14 +94,26 @@ public sealed class LocalUsageTracker : IUsageTracker
                 {
                     _state[entry.Key] = entry.Value;
                 }
+
+                _logger.LogInformation(
+                    "Loaded usage state for {UserCount} user(s) from {StateFilePath}",
+                    _state.Count,
+                    _stateFilePath);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            _logger.LogWarning(ex, "Unable to read usage state file {StateFilePath}; starting empty", _stateFilePath);
             _state.Clear();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _logger.LogWarning(ex, "Usage state file {StateFilePath} is invalid JSON; starting empty", _stateFilePath);
+            _state.Clear();
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException)
+        {
+            _logger.LogWarning(ex, "Usage state file {StateFilePath} is not readable due to permissions; starting empty", _stateFilePath);
             _state.Clear();
         }
 

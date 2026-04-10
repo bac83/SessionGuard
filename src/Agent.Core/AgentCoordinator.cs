@@ -31,6 +31,7 @@ public sealed class AgentCoordinator(
                 var usedMinutes = await usageTracker.GetUsedMinutesAsync(mapping, usageDateUtc, cancellationToken);
                 var evaluation = policyEvaluator.Evaluate(response.Policy, usedMinutes);
                 UsageReportResponse? usageResponse = null;
+                string? message = null;
 
                 if (response.Policy is not null && !response.IsFromCache)
                 {
@@ -49,28 +50,60 @@ public sealed class AgentCoordinator(
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex, "Usage reporting failed for local user {LocalUser}", mapping.LocalUser);
+                        message = $"Usage reporting failed: {ex.Message}";
                     }
                 }
 
                 var shouldLock = evaluation.ShouldLock || usageResponse?.RemainingMinutes is 0;
                 var remainingMinutes = usageResponse?.RemainingMinutes ?? evaluation.RemainingMinutes;
+                var policy = response.Policy;
+                var isLocked = false;
+
+                logger.LogDebug(
+                    "Policy decision for {LocalUser}/{ChildId}: policyAvailable={PolicyAvailable}, fromCache={FromCache}, policyVersion={PolicyVersion}, enabled={PolicyEnabled}, dailyLimit={DailyLimitMinutes}, used={UsedMinutes}, remaining={RemainingMinutes}, usageReported={UsageReported}, shouldLock={ShouldLock}",
+                    mapping.LocalUser,
+                    mapping.ChildId,
+                    policy is not null,
+                    response.IsFromCache,
+                    policy?.Version ?? "none",
+                    policy?.IsEnabled,
+                    policy?.DailyLimitMinutes,
+                    evaluation.UsedMinutes,
+                    remainingMinutes,
+                    usageResponse is not null,
+                    shouldLock);
 
                 if (shouldLock)
                 {
-                    await sessionController.LockAsync(mapping, cancellationToken);
+                    logger.LogWarning(
+                        "Lock requested for local user {LocalUser} because remaining minutes are {RemainingMinutes}",
+                        mapping.LocalUser,
+                        remainingMinutes);
+
+                    try
+                    {
+                        await sessionController.LockAsync(mapping, cancellationToken);
+                        isLocked = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Lock failed for local user {LocalUser}", mapping.LocalUser);
+                        message = $"Lock failed: {ex.Message}";
+                    }
                 }
 
                 var snapshot = new AgentStatusSnapshot(
                     options.AgentId,
+                    options.AgentVersion,
                     mapping.LocalUser,
                     mapping.ChildId,
                     response.Policy is not null,
                     response.IsFromCache,
-                    shouldLock,
+                    isLocked,
                     remainingMinutes,
                     evaluation.UsedMinutes,
                     now,
-                    response.Policy is null ? "No valid policy available." : null);
+                    response.Policy is null ? "No valid policy available." : message);
 
                 snapshots.Add(snapshot);
                 await agentStatusStore.SaveAsync(snapshot, cancellationToken);
@@ -80,6 +113,7 @@ public sealed class AgentCoordinator(
                 logger.LogError(ex, "Agent cycle failed for local user {LocalUser}", mapping.LocalUser);
                 var failed = new AgentStatusSnapshot(
                     options.AgentId,
+                    options.AgentVersion,
                     mapping.LocalUser,
                     mapping.ChildId,
                     false,

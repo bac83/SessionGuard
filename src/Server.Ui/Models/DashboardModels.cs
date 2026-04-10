@@ -13,6 +13,7 @@ public sealed record ChildProfile(
 
 public sealed record AgentStatus(
     string AgentId,
+    string AgentVersion,
     string HostName,
     string LinuxUserName,
     string ChildId,

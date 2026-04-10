@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Agent.Linux;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Shared.Contracts;
 
@@ -53,7 +54,7 @@ public sealed class AgentLinuxTests
         commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
-        var service = new LinuxSessionLockService(commandRunner, environmentReader);
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
 
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
@@ -69,7 +70,7 @@ public sealed class AgentLinuxTests
         commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(5, string.Empty, string.Empty));
 
-        var service = new LinuxSessionLockService(commandRunner, environmentReader);
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None));
@@ -86,7 +87,7 @@ public sealed class AgentLinuxTests
         commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, string.Empty));
 
-        var service = new LinuxSessionLockService(commandRunner, environmentReader);
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None));
@@ -104,6 +105,7 @@ public sealed class AgentLinuxTests
 
         var first = new AgentStatusSnapshot(
             "agent-01",
+            "1.2.3",
             "alice",
             "child-01",
             true,
@@ -121,7 +123,8 @@ public sealed class AgentLinuxTests
         var json = await File.ReadAllTextAsync(path);
         var saved = JsonSerializer.Deserialize(json, SessionGuardJsonContext.Default.AgentStatusSnapshot);
         Assert.NotNull(saved);
-        Assert.Equal(25, saved!.UsedMinutes);
+        Assert.Equal("1.2.3", saved!.AgentVersion);
+        Assert.Equal(25, saved.UsedMinutes);
         Assert.Equal("v2", saved.Message);
     }
 
@@ -138,11 +141,11 @@ public sealed class AgentLinuxTests
         var secondTimeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 10, 0, TimeSpan.Zero));
 
-        var firstTracker = new LocalUsageTracker(firstTimeProvider, options);
+        var firstTracker = new LocalUsageTracker(firstTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
         Assert.Equal(5, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
 
-        var secondTracker = new LocalUsageTracker(secondTimeProvider, options);
+        var secondTracker = new LocalUsageTracker(secondTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(10, await secondTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
     }
 
@@ -157,7 +160,7 @@ public sealed class AgentLinuxTests
             new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 9, 0, 1, 0, TimeSpan.Zero));
 
-        var tracker = new LocalUsageTracker(timeProvider, options);
+        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 9), CancellationToken.None));
@@ -173,7 +176,7 @@ public sealed class AgentLinuxTests
         var options = new AgentLinuxOptions { CacheDirectory = directory };
         var mapping = new UserChildMapping("alice", "child-01");
         var timeProvider = new SequenceTimeProvider(new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options);
+        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
 
         var used = await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None);
 
@@ -189,7 +192,7 @@ public sealed class AgentLinuxTests
         var timeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 8, 12, 0, 30, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options);
+        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
 
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         var persistedAfterFirstPoll = await ReadPersistedLastSeenAsync(directory);

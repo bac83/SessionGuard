@@ -82,10 +82,11 @@ public sealed class SessionGuardRepository(SessionGuardDbContext dbContext, Time
                     : null;
                 int? remaining = child?.RemainingMinutes;
                 var isOnline = agent.LastSeenAtUtc >= now.AddMinutes(-5);
-                var isLocked = child is not null && remaining is 0 && (used > 0 || !child.IsEnabled);
+                var isLocked = child is not null && remaining is 0 && (used > 0 || !child.IsEnabled || child.DailyLimitMinutes == 0);
 
                 return new AgentStatusSummary(
                     agent.AgentId,
+                    agent.AgentVersion,
                     agent.Hostname,
                     agent.LocalUser,
                     agent.ChildId,
