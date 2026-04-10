@@ -41,12 +41,15 @@ Keep outputs aligned with this file. Resolve conflicts in favor of simplicity an
 - Do not merge code with failing tests
 
 ## PR rules
+
+- Every task must be started in a new branch with a descriptive name
 - Keep PRs small and focused
 - Link the issue if one is mentioned
 - Include a short summary, risks, and test notes
 - Include screenshots for UI changes
 - Mention migrations/config changes explicitly
 - Do not mix broad refactors with new features unless required
+- Every update on a PR must be reviewed by `@copilot`
 
 ## Definition of done
 A task is done only if:
