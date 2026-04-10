@@ -32,7 +32,13 @@ static async Task RunTrayAsync(string statusFilePath, TimeSpan interval)
     {
         var snapshot = await ReadSnapshotAsync(statusFilePath);
         var tooltip = BuildTooltip(snapshot, statusFilePath).Replace("\r", " ").Replace("\n", "\\n");
-        var icon = snapshot?.IsLocked is true ? "dialog-warning" : "sessionguard";
+        var icon = snapshot is not null
+            && (
+                snapshot.IsLocked
+                || (snapshot.RemainingMinutes == 0 && !snapshot.IsLocked)
+                || !string.IsNullOrWhiteSpace(snapshot.Message))
+            ? "dialog-warning"
+            : "sessionguard";
 
         try
         {
