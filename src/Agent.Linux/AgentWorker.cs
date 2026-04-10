@@ -8,12 +8,22 @@ namespace Agent.Linux;
 public sealed class AgentWorker(
     AgentCoordinator agentCoordinator,
     IOptions<AgentOptions> agentOptions,
+    IOptions<AgentLinuxOptions> linuxOptions,
     ILogger<AgentWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(10, agentOptions.Value.PollIntervalSeconds));
-        logger.LogInformation("SessionGuard agent started with poll interval {IntervalSeconds}s", interval.TotalSeconds);
+        var agent = agentOptions.Value;
+        var linux = linuxOptions.Value;
+        var interval = TimeSpan.FromSeconds(Math.Max(10, agent.PollIntervalSeconds));
+        logger.LogInformation(
+            "SessionGuard agent {AgentId} version {AgentVersion} started with poll interval {IntervalSeconds}s; cache={CacheDirectory}; status={StatusFilePath}; userMap={UserMapPath}",
+            agent.AgentId,
+            agent.AgentVersion,
+            interval.TotalSeconds,
+            linux.CacheDirectory,
+            linux.StatusFilePath,
+            linux.UserMapPath);
 
         while (!stoppingToken.IsCancellationRequested)
         {

@@ -65,6 +65,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
     {
         return new AgentStatus(
             agent.AgentId,
+            agent.AgentVersion ?? "unknown",
             agent.Hostname,
             agent.LocalUser ?? "unknown",
             agent.ChildId ?? "unassigned",

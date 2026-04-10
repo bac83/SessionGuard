@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+set -e
+
+mkdir -p /etc/sessionguard
+mkdir -p /var/lib/sessionguard/cache
+mkdir -p /var/lib/sessionguard/status
+chmod 755 /etc/sessionguard
+chmod 700 /var/lib/sessionguard/cache
+chmod 755 /var/lib/sessionguard/status
+
+if [ ! -f /etc/sessionguard/user-map.json ]; then
+  cat > /etc/sessionguard/user-map.json <<'EOF'
+{
+  "linux-user": "child-id"
+}
+EOF
+  chmod 644 /etc/sessionguard/user-map.json
+fi
+
+systemctl daemon-reload >/dev/null 2>&1 || true
+
+exit 0

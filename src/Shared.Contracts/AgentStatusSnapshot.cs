@@ -2,6 +2,7 @@ namespace Shared.Contracts;
 
 public sealed record AgentStatusSnapshot(
     string AgentId,
+    string AgentVersion,
     string LocalUser,
     string ChildId,
     bool PolicyAvailable,

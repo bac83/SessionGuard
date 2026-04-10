@@ -2,6 +2,7 @@ using Agent.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 
 namespace Agent.Linux;
 
@@ -18,6 +19,9 @@ public static class Program
                 options.AgentId = string.IsNullOrWhiteSpace(options.AgentId)
                     ? Environment.MachineName.ToLowerInvariant()
                     : options.AgentId.Trim();
+                options.AgentVersion = string.IsNullOrWhiteSpace(options.AgentVersion)
+                    ? ResolveAgentVersion()
+                    : options.AgentVersion.Trim();
                 options.PollIntervalSeconds = options.PollIntervalSeconds <= 0 ? 60 : options.PollIntervalSeconds;
             });
 
@@ -56,5 +60,13 @@ public static class Program
         builder.Services.AddHostedService<AgentWorker>();
 
         await builder.Build().RunAsync();
+    }
+
+    private static string ResolveAgentVersion()
+    {
+        var assembly = typeof(Program).Assembly;
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "0.0.0";
     }
 }

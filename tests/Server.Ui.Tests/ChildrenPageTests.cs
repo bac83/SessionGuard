@@ -10,6 +10,22 @@ namespace Server.Ui.Tests;
 public sealed class ChildrenPageTests : TestContext
 {
     [Fact]
+    public void AgentsPage_ShowsAgentVersion()
+    {
+        var store = Substitute.For<IAdminDashboardStore>();
+        store.GetSnapshotAsync(Arg.Any<CancellationToken>()).Returns(new DashboardSnapshot(
+            [new ChildProfile("child-01", "Sara", 90, true, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero))],
+            [new AgentStatus("agent-01", "1.2.3", "mond", "sara", "child-01", true, false, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero))],
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero)));
+
+        Services.AddSingleton(store);
+
+        var cut = RenderComponent<Agents>();
+
+        Assert.Contains("1.2.3", cut.Markup);
+    }
+
+    [Fact]
     public void ChildrenPage_ShowsAssignedAgentForChild()
     {
         var store = Substitute.For<IAdminDashboardStore>();
@@ -18,7 +34,7 @@ public sealed class ChildrenPageTests : TestContext
                 new ChildProfile("child-01", "Sara", 90, true, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero))
             ],
             [
-                new AgentStatus("agent-01", "mond", "sara", "child-01", true, false, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero))
+                new AgentStatus("agent-01", "1.2.3", "mond", "sara", "child-01", true, false, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero))
             ],
             new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero)));
 

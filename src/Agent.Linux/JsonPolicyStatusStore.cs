@@ -12,6 +12,7 @@ public sealed class JsonPolicyStatusStore(string statusFilePath) : IAgentStatusS
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
+            SetUnixMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         }
 
         var tempFile = $"{statusFilePath}.{Guid.NewGuid():N}.tmp";
@@ -21,5 +22,14 @@ public sealed class JsonPolicyStatusStore(string statusFilePath) : IAgentStatusS
         }
 
         File.Move(tempFile, statusFilePath, overwrite: true);
+        SetUnixMode(statusFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+    }
+
+    private static void SetUnixMode(string path, UnixFileMode mode)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, mode);
+        }
     }
 }

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SessionGuard
+Comment=Show SessionGuard status
+Icon=sessionguard
+Exec=/usr/bin/dotnet /opt/sessionguard/tray/Agent.Tray.dll
+Terminal=false
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=X-Cinnamon;GNOME;Unity;MATE;XFCE;

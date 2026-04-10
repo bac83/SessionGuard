@@ -2,6 +2,7 @@ namespace Shared.Contracts;
 
 public sealed record AgentStatusSummary(
     string AgentId,
+    string? AgentVersion,
     string Hostname,
     string? LocalUser,
     string? ChildId,

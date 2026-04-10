@@ -40,5 +40,76 @@ public static class DependencyInjection
         await using var scope = services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SessionGuardDbContext>();
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        await EnsureColumnAsync(dbContext, "Agents", "AgentVersion", "TEXT", cancellationToken);
+        await EnsureColumnAsync(dbContext, "Agents", "LastPolicyVersion", "TEXT", cancellationToken);
+    }
+
+    private static async Task EnsureColumnAsync(
+        SessionGuardDbContext dbContext,
+        string tableName,
+        string columnName,
+        string columnType,
+        CancellationToken cancellationToken)
+    {
+        ValidateSqliteIdentifier(tableName);
+        ValidateSqliteIdentifier(columnName);
+        ValidateSqliteType(columnType);
+
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldClose = connection.State == System.Data.ConnectionState.Closed;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            var exists = false;
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info({tableName})";
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+            }
+
+            if (exists)
+            {
+                return;
+            }
+
+            await using var alterCommand = connection.CreateCommand();
+            alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}";
+            await alterCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static void ValidateSqliteIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != '_'))
+        {
+            throw new InvalidOperationException($"Invalid SQLite identifier '{value}'.");
+        }
+    }
+
+    private static void ValidateSqliteType(string value)
+    {
+        if (!string.Equals(value, "TEXT", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Unsupported SQLite column type '{value}'.");
+        }
     }
 }
