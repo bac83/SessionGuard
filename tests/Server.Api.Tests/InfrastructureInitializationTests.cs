@@ -12,10 +12,12 @@ public sealed class InfrastructureInitializationTests
     {
         var sqlitePath = CreateSqlitePath();
         await CreateLegacyAgentsTableAsync(sqlitePath);
+        await using var firstServices = CreateServices(sqlitePath);
+        await using var secondServices = CreateServices(sqlitePath);
 
         await Task.WhenAll(
-            CreateServices(sqlitePath).InitializeServerInfrastructureAsync(),
-            CreateServices(sqlitePath).InitializeServerInfrastructureAsync());
+            firstServices.InitializeServerInfrastructureAsync(),
+            secondServices.InitializeServerInfrastructureAsync());
 
         var columns = await ReadAgentColumnsAsync(sqlitePath);
         Assert.Contains("AgentVersion", columns);
