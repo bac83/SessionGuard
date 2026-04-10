@@ -1,7 +1,7 @@
-using System.Net;
-using System.Text;
+using NSubstitute;
 using Server.Ui.Models;
 using Shared.Contracts;
+using Server.Infrastructure.Services;
 using Server.Ui.Services;
 
 namespace Server.Ui.Tests;
@@ -9,56 +9,47 @@ namespace Server.Ui.Tests;
 public sealed class UiSmokeTests
 {
     [Fact]
-    public async Task GetDashboardAsync_DeserializesDashboardPayload()
+    public async Task GetSnapshotAsync_MapsDashboardPayload()
     {
-        const string payload = """
-        {
-          "children": [
-            {
-              "childId": "child-01",
-              "displayName": "Sara",
-              "dailyLimitMinutes": 90,
-              "isEnabled": true,
-              "updatedAtUtc": "2026-04-08T12:00:00+00:00"
-            }
-          ],
-          "agents": []
-        }
-        """;
+        var repository = Substitute.For<ISessionGuardRepository>();
+        repository.GetDashboardAsync(Arg.Any<CancellationToken>()).Returns(new DashboardResponse(
+            [new ChildSummary("child-01", "Sara", 90, true, 15, 75, new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero))],
+            [new AgentStatusSummary("agent-01", "1.2.3", "mond", "sara", "child-01", "policy-v1", 15, 75, false, true, new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero), null)]));
 
-        using var client = new HttpClient(new StubMessageHandler(payload))
-        {
-            BaseAddress = new Uri("http://localhost:8080")
-        };
+        var store = new ApiAdminDashboardStore(repository);
+        var dashboard = await store.GetSnapshotAsync();
 
-        var apiClient = new SessionGuardApiClient(client);
-        var dashboard = await apiClient.GetDashboardAsync();
-
-        Assert.Single(dashboard.Children);
-        Assert.Equal("child-01", dashboard.Children[0].ChildId);
+        var child = Assert.Single(dashboard.Children);
+        Assert.Equal("child-01", child.ChildId);
+        Assert.Equal(90, child.DailyBudgetMinutes);
+        var agent = Assert.Single(dashboard.Agents);
+        Assert.Equal("1.2.3", agent.AgentVersion);
     }
 
     [Fact]
-    public async Task SaveChildAsync_ThrowsApiErrorMessageOnRejectedRequest()
+    public async Task AddChildAsync_TrimsDraftAndReturnsMappedChild()
     {
-        const string payload = """
+        var repository = Substitute.For<ISessionGuardRepository>();
+        repository.UpsertChildAsync(Arg.Any<UpsertChildRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ChildSummary("child-01", "Sara", 90, true, 0, 90, new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero)));
+
+        var store = new ApiAdminDashboardStore(repository);
+        var child = await store.AddChildAsync(new ChildProfileDraft
         {
-          "error": "validation_failed",
-          "message": "ChildId is required."
-        }
-        """;
+            ChildId = " child-01 ",
+            DisplayName = " Sara ",
+            DailyBudgetMinutes = 90,
+            IsActive = true
+        });
 
-        using var client = new HttpClient(new StubMessageHandler(payload, HttpStatusCode.BadRequest))
-        {
-            BaseAddress = new Uri("http://localhost:8080")
-        };
-
-        var apiClient = new SessionGuardApiClient(client);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            apiClient.SaveChildAsync(new UpsertChildRequest("", "Sara", 90, true)));
-
-        Assert.Equal("ChildId is required.", exception.Message);
+        Assert.Equal("child-01", child.ChildId);
+        await repository.Received(1).UpsertChildAsync(
+            Arg.Is<UpsertChildRequest>(request =>
+                request.ChildId == "child-01"
+                && request.DisplayName == "Sara"
+                && request.DailyLimitMinutes == 90
+                && request.IsEnabled),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -104,16 +95,5 @@ public sealed class UiSmokeTests
 
         Assert.Empty(summary.Agents);
         Assert.Equal("Awaiting agent", summary.StatusLabel);
-    }
-
-    private sealed class StubMessageHandler(string payload, HttpStatusCode statusCode = HttpStatusCode.OK) : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(payload, Encoding.UTF8, "application/json")
-            });
-        }
     }
 }

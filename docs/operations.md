@@ -4,9 +4,10 @@ This document describes the MVP deployment and day-to-day operations.
 
 ## Server deployment
 - Run the server in containers.
+- The server container hosts both the Blazor UI and `/api/*` endpoints on port `8080`.
 - Mount the SQLite database into a persistent volume.
 - Configure the server with environment variables rather than hardcoded values.
-- Set `SessionGuard__Security__ApiKey` in deployed environments so `/api/*` requests require the shared API key header.
+- Set `SessionGuard__Security__ApiKey` in deployed environments so `/api/*` requests require the shared API key header. The UI and health check remain reachable without that header.
 - Keep the server Linux-agnostic.
 - Keep the MVP API on a trusted network or behind a reverse proxy. Authentication and authorization are intentionally deferred for this first slice.
 

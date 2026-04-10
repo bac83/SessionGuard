@@ -1,6 +1,6 @@
 @page "/"
-@using Shared.Contracts
-@inject SessionGuardApiClient ApiClient
+@using Server.Ui.Models
+@inject IAdminDashboardStore DashboardStore
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -22,7 +22,7 @@
         </div>
         <div class="metric-card">
             <span class="metric-label">Enabled policies</span>
-            <strong>@(_dashboard?.Children.Count(x => x.IsEnabled) ?? 0)</strong>
+            <strong>@(_dashboard?.Children.Count(x => x.IsActive) ?? 0)</strong>
         </div>
         <div class="metric-card">
             <span class="metric-label">Last refresh</span>
@@ -54,10 +54,10 @@
             <div class="field-row">
                 <div class="field field--inline">
                     <label>Daily minutes</label>
-                    <InputNumber @bind-Value="_form.DailyLimitMinutes" class="field-input field-input--compact" />
+                    <InputNumber @bind-Value="_form.DailyBudgetMinutes" class="field-input field-input--compact" />
                 </div>
                 <label class="checkbox-field">
-                    <InputCheckbox @bind-Value="_form.IsEnabled" class="checkbox-input" />
+                    <InputCheckbox @bind-Value="_form.IsActive" class="checkbox-input" />
                     Policy enabled
                 </label>
             </div>
@@ -82,8 +82,8 @@
                         <div class="summary-row__meta">@child.ChildId</div>
                     </div>
                     <div class="summary-row__value">
-                        <span class="badge @(child.IsEnabled ? "badge--success" : "badge--muted")">@(child.IsEnabled ? "Enabled" : "Paused")</span>
-                        <strong>@FormatMinutes(child.DailyLimitMinutes)</strong>
+                        <span class="badge @(child.IsActive ? "badge--success" : "badge--muted")">@(child.IsActive ? "Enabled" : "Paused")</span>
+                        <strong>@FormatMinutes(child.DailyBudgetMinutes)</strong>
                     </div>
                 </div>
             }
@@ -104,8 +104,8 @@
             {
                 <div class="summary-row">
                     <div>
-                        <strong>@agent.Hostname</strong>
-                        <div class="summary-row__meta">@($"{agent.LocalUser ?? "unassigned"} -> {agent.ChildId ?? "none"}")</div>
+                        <strong>@agent.HostName</strong>
+                        <div class="summary-row__meta">@($"{agent.LinuxUserName} -> {agent.ChildId}")</div>
                     </div>
                     <div class="summary-row__value">
                         <span class="badge @(agent.IsOnline ? "badge--success" : "badge--danger")">
@@ -120,8 +120,8 @@
 </section>
 
 @code {
-    private DashboardResponse? _dashboard;
-    private ChildFormModel _form = new();
+    private DashboardSnapshot? _dashboard;
+    private ChildProfileDraft _form = new();
     private string? _saveMessage;
     private string? _errorMessage;
     private string _lastRefreshLabel = "not loaded";
@@ -133,7 +133,7 @@
 
     private async Task LoadDashboardAsync()
     {
-        _dashboard = await ApiClient.GetDashboardAsync();
+        _dashboard = await DashboardStore.GetSnapshotAsync();
         _lastRefreshLabel = DateTimeOffset.Now.ToString("HH:mm");
     }
 
@@ -144,9 +144,9 @@
 
         try
         {
-            var result = await ApiClient.SaveChildAsync(new UpsertChildRequest(_form.ChildId, _form.DisplayName, _form.DailyLimitMinutes, _form.IsEnabled));
+            var result = await DashboardStore.AddChildAsync(_form);
             _saveMessage = $"Saved '{result.DisplayName}'.";
-            _form = new ChildFormModel { IsEnabled = true };
+            _form = new ChildProfileDraft { IsActive = true };
             await LoadDashboardAsync();
         }
         catch (Exception ex)
@@ -163,12 +163,4 @@
     }
 
     private static string FormatDate(DateTimeOffset? value) => value?.ToLocalTime().ToString("dd MMM HH:mm") ?? "Never";
-
-    private sealed class ChildFormModel
-    {
-        public string ChildId { get; set; } = string.Empty;
-        public string DisplayName { get; set; } = string.Empty;
-        public int DailyLimitMinutes { get; set; } = 60;
-        public bool IsEnabled { get; set; } = true;
-    }
 }

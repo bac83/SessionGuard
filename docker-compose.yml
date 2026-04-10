@@ -1,6 +1,6 @@
 services:
-  server-api:
-    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server-api:${SESSIONGUARD_IMAGE_TAG:-main}
+  server:
+    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server:${SESSIONGUARD_IMAGE_TAG:-main}
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -11,19 +11,6 @@ services:
       - "8080:8080"
     volumes:
       - sessionguard-data:/data
-
-  server-ui:
-    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server-ui:${SESSIONGUARD_IMAGE_TAG:-main}
-    pull_policy: always
-    restart: unless-stopped
-    environment:
-      ASPNETCORE_URLS: http://+:8081
-      SessionGuard__ApiBaseUrl: http://server-api:8080
-      SessionGuard__ApiKey: change-me
-    ports:
-      - "8081:8081"
-    depends_on:
-      - server-api
 
 volumes:
   sessionguard-data:

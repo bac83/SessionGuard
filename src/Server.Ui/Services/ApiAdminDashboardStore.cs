@@ -1,13 +1,14 @@
 using Server.Ui.Models;
+using Server.Infrastructure.Services;
 using Shared.Contracts;
 
 namespace Server.Ui.Services;
 
-public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IAdminDashboardStore
+public sealed class ApiAdminDashboardStore(ISessionGuardRepository repository) : IAdminDashboardStore
 {
     public async Task<DashboardSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        var dashboard = await apiClient.GetDashboardAsync(cancellationToken);
+        var dashboard = await repository.GetDashboardAsync(cancellationToken);
         return new DashboardSnapshot(
             dashboard.Children.Select(MapChild).ToArray(),
             dashboard.Agents.Select(MapAgent).ToArray(),
@@ -16,7 +17,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
 
     public async Task<ChildProfile> AddChildAsync(ChildProfileDraft draft, CancellationToken cancellationToken = default)
     {
-        var child = await apiClient.SaveChildAsync(
+        var child = await repository.UpsertChildAsync(
             new UpsertChildRequest(draft.ChildId.Trim(), draft.DisplayName.Trim(), draft.DailyBudgetMinutes, draft.IsActive),
             cancellationToken);
 
@@ -29,7 +30,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
         var existing = snapshot.Children.FirstOrDefault(child => string.Equals(child.ChildId, childId, StringComparison.OrdinalIgnoreCase))
             ?? throw new KeyNotFoundException($"No child profile exists for id '{childId}'.");
 
-        var child = await apiClient.SaveChildAsync(
+        var child = await repository.UpsertChildAsync(
             new UpsertChildRequest(existing.ChildId, existing.DisplayName, dailyBudgetMinutes, existing.IsActive),
             cancellationToken);
 
@@ -42,7 +43,7 @@ public sealed class ApiAdminDashboardStore(SessionGuardApiClient apiClient) : IA
         var existing = snapshot.Children.FirstOrDefault(child => string.Equals(child.ChildId, childId, StringComparison.OrdinalIgnoreCase))
             ?? throw new KeyNotFoundException($"No child profile exists for id '{childId}'.");
 
-        var child = await apiClient.SaveChildAsync(
+        var child = await repository.UpsertChildAsync(
             new UpsertChildRequest(existing.ChildId, existing.DisplayName, existing.DailyBudgetMinutes, isActive),
             cancellationToken);
 
