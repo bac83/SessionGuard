@@ -1,10 +1,5 @@
 services:
-  server-api:
-    build:
-      context: .
-      dockerfile: src/Server.Api/Dockerfile
-
-  server-ui:
+  server:
     build:
       context: .
       dockerfile: src/Server.Ui/Dockerfile

@@ -3,7 +3,7 @@
 Minimal client-server system for centrally managing screen-time policies for Linux child accounts.
 
 ## MVP
-- Dockerized server with a Blazor admin UI and SQLite persistence
+- Dockerized server with API endpoints, a Blazor admin UI, and SQLite persistence
 - SQLite stored in a mounted volume
 - Example `docker-compose.yml`
 - Linux agent that polls for policy updates and caches the last valid policy offline
@@ -22,8 +22,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Full parental-control suite beyond daily screen-time budgets
 
 ## Architecture
-- `Server.Api`: admin and agent HTTP endpoints
-- `Server.Ui`: Blazor admin UI
+- `Server.Ui`: server host with admin and agent HTTP endpoints plus Blazor admin UI
 - `Server.Infrastructure`: persistence and server-side wiring
 - `Shared.Contracts`: transport contracts shared by server and agent
 - `Agent.Core`: policy/state logic and offline cache behavior
@@ -32,7 +31,6 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - `packaging/deb`: Debian package assets for the Linux agent and tray autostart
 
 ## Repository layout
-- `src/Server.Api`
 - `src/Server.Ui`
 - `src/Server.Infrastructure`
 - `src/Agent.Core`
@@ -75,7 +73,7 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Keep workflows simple and deterministic
 
 ## Deliverables
-- Server API and UI Dockerfiles
+- Server Dockerfile
 - Example `docker-compose.yml`
 - Volume-backed SQLite setup
 - Linux agent service
@@ -83,7 +81,8 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - CI/CD workflows
 
 ## Docker Compose usage
-- Default: `docker compose up -d` pulls the published `main` images from GHCR.
+- Default: `docker compose up -d` pulls the published `main` server image from GHCR.
 - Override the image owner with `SESSIONGUARD_IMAGE_OWNER` if you publish from a fork or another org.
 - Override the tag if needed with `SESSIONGUARD_IMAGE_TAG`, for example `v1.0.0`.
 - Local fallback build: `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`
+- The UI and API share port `8080`; agents continue to call `/api/agent/*`.

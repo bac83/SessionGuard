@@ -65,6 +65,18 @@ public sealed class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task RootPage_DoesNotRequireApiKey_WhenApiKeyIsConfigured()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath, "secret-key");
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ApiKey_WithMultipleHeaderValues_IsRejected()
     {
         var sqlitePath = CreateSqlitePath();
@@ -178,6 +190,18 @@ public sealed class ApiEndpointsTests
         {
             AllowAutoRedirect = false
         });
+
+        var response = await client.GetAsync("/healthz");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task HealthCheck_DoesNotRequireApiKey_WhenApiKeyIsConfigured()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath, "secret-key");
+        using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/healthz");
 

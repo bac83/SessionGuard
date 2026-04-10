@@ -3,7 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Shared.Contracts;
 
-namespace Server.Api;
+namespace Server.Ui.Api;
 
 public sealed class ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger, IOptions<ApiSecurityOptions> options)
 {
