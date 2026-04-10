@@ -15,17 +15,15 @@ if (runOnce)
     return snapshot is null ? 1 : 0;
 }
 
-await RunTrayAsync(statusFilePath, TimeSpan.FromSeconds(pollSeconds));
-return 0;
+return await RunTrayAsync(statusFilePath, TimeSpan.FromSeconds(pollSeconds));
 
-static async Task RunTrayAsync(string statusFilePath, TimeSpan interval)
+static async Task<int> RunTrayAsync(string statusFilePath, TimeSpan interval)
 {
     using var yad = StartYad();
     if (yad is null)
     {
         Console.Error.WriteLine("Unable to start 'yad'. Install the sessionguard-agent package dependencies or run Agent.Tray.dll --once for console status.");
-        await Task.Delay(Timeout.InfiniteTimeSpan);
-        return;
+        return 1;
     }
 
     while (!yad.HasExited)
@@ -53,6 +51,8 @@ static async Task RunTrayAsync(string statusFilePath, TimeSpan interval)
 
         await Task.Delay(interval);
     }
+
+    return 0;
 }
 
 static Process? StartYad()
