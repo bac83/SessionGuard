@@ -17,6 +17,10 @@ EOF
   chmod 644 /etc/sessionguard/user-map.json
 fi
 
-systemctl daemon-reload >/dev/null 2>&1 || true
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable sessionguard-agent.service >/dev/null 2>&1 || true
+  systemctl restart sessionguard-agent.service >/dev/null 2>&1 || true
+fi
 
 exit 0

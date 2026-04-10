@@ -20,8 +20,80 @@ This guide covers the MVP Linux agent for SessionGuard.
 1. Install the versioned `.deb` package from the CI artifact, or install the published binaries manually.
 2. Configure the server URL, optional API key, cache/status paths, and user mapping in `/etc/sessionguard/agent.env` and `/etc/sessionguard/user-map.json`.
 3. For manual binary installs, install the example systemd unit from `docs/sessionguard-agent.service`.
-4. Start the service and verify that it can fetch a policy.
+4. The Debian package enables and restarts `sessionguard-agent.service` automatically after install or upgrade so the newly installed agent is used immediately.
 5. The Debian package installs a user-session autostart entry for the tray status UI at `/etc/xdg/autostart/sessionguard-tray.desktop`.
+
+## Artifact install example
+Download the latest successful `main` pipeline artifact with GitHub CLI and install it:
+
+```bash
+set -euo pipefail
+
+OWNER=bac83
+REPO=SessionGuard
+WORKFLOW=ci.yml
+BRANCH=main
+DOWNLOAD_DIR=/tmp/sessionguard-agent
+
+RUN_ID="$(gh run list \
+  --repo "$OWNER/$REPO" \
+  --workflow "$WORKFLOW" \
+  --branch "$BRANCH" \
+  --status success \
+  --limit 1 \
+  --json databaseId \
+  --jq '.[0].databaseId')"
+
+rm -rf "$DOWNLOAD_DIR"
+mkdir -p "$DOWNLOAD_DIR"
+gh run download "$RUN_ID" \
+  --repo "$OWNER/$REPO" \
+  --pattern 'sessionguard-agent_*_amd64' \
+  --dir "$DOWNLOAD_DIR"
+
+DEB="$(find "$DOWNLOAD_DIR" -name 'sessionguard-agent_*_amd64.deb' -print -quit)"
+sudo apt install -y "$DEB"
+```
+
+Configure the installed agent for your server and child user:
+
+```bash
+set -euo pipefail
+
+SERVER_URL=http://192.168.178.188:38080
+AGENT_ID=mond-linux
+LOCAL_USER=childuser
+CHILD_ID=child-01
+
+sudo install -d -m 755 /etc/sessionguard
+sudo tee /etc/sessionguard/agent.env >/dev/null <<EOF
+SessionGuard__Agent__ServerBaseUrl=$SERVER_URL
+SessionGuard__Agent__AgentId=$AGENT_ID
+SessionGuard__Agent__UserMapPath=/etc/sessionguard/user-map.json
+SessionGuard__Agent__CacheDirectory=/var/lib/sessionguard/cache
+SessionGuard__Agent__StatusFilePath=/var/lib/sessionguard/status/agent-status.json
+SessionGuard__Agent__PollIntervalSeconds=60
+EOF
+
+sudo tee /etc/sessionguard/user-map.json >/dev/null <<EOF
+{
+  "$LOCAL_USER": "$CHILD_ID"
+}
+EOF
+
+sudo systemctl restart sessionguard-agent.service
+```
+
+Test the service and local status:
+
+```bash
+set -euo pipefail
+
+systemctl status sessionguard-agent.service --no-pager
+journalctl -u sessionguard-agent.service -n 80 --no-pager
+sudo test -s /var/lib/sessionguard/status/agent-status.json
+dotnet /opt/sessionguard/tray/Agent.Tray.dll --once
+```
 
 ## Configuration
 Use environment variables or a config file. Keep secrets out of source control.
