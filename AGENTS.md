@@ -76,3 +76,17 @@ A task is done only if:
 4. Linux agent core
 5. Agent install docs
 6. GitHub CI/CD
+
+## Repo Skill Preferences
+
+- Use `caveman` when the user asks for brief, terse, token-saving, or “caveman mode” responses.
+- Use `caveman-commit` whenever generating commit messages or after staging changes.
+- Use `caveman-review` whenever reviewing diffs, PRs, or code-review comments.
+- Use `compress` when the user asks to compress memory files, AGENTS-style notes, CLAUDE.md, TODO docs, preferences, or long repo guidance.
+
+## Short Commands
+
+- `/caveman` means: use the `caveman` skill.
+- `/commit` means: use the `caveman-commit` skill.
+- `/review` means: use the `caveman-review` skill.
+- `/compress <file>` means: use the `compress` skill on that file.
