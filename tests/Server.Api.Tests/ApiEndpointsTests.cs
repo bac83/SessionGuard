@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Server.Infrastructure.Services;
 using Shared.Contracts;
 
 namespace Server.Api.Tests;
@@ -208,6 +211,32 @@ public sealed class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task MissingApiRoute_DoesNotReturnUiNotFoundPage()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/missing");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("text/html", response.Content.Headers.ContentType?.MediaType ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task ApiException_ReturnsProblemDetailsJson()
+    {
+        var sqlitePath = CreateSqlitePath();
+        using var factory = new SessionGuardWebApplicationFactory(sqlitePath, repository: new ThrowingRepository());
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/admin/dashboard");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
     private static string CreateSqlitePath()
     {
         var root = Path.Combine(Path.GetTempPath(), "sessionguard-api-tests", Guid.NewGuid().ToString("N"));
@@ -215,7 +244,10 @@ public sealed class ApiEndpointsTests
         return Path.Combine(root, "sessionguard.db");
     }
 
-    private sealed class SessionGuardWebApplicationFactory(string sqlitePath, string? apiKey = null) : WebApplicationFactory<global::Program>
+    private sealed class SessionGuardWebApplicationFactory(
+        string sqlitePath,
+        string? apiKey = null,
+        ISessionGuardRepository? repository = null) : WebApplicationFactory<global::Program>
     {
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
         {
@@ -224,6 +256,36 @@ public sealed class ApiEndpointsTests
             {
                 builder.UseSetting("SessionGuard:Security:ApiKey", apiKey);
             }
+
+            if (repository is not null)
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.RemoveAll<ISessionGuardRepository>();
+                    services.AddScoped(_ => repository);
+                });
+            }
         }
+    }
+
+    private sealed class ThrowingRepository : ISessionGuardRepository
+    {
+        public Task<DashboardResponse> GetDashboardAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("boom");
+
+        public Task<IReadOnlyList<ChildSummary>> GetChildrenAsync(CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<ChildSummary> UpsertChildAsync(UpsertChildRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<AgentRegistrationResponse> RegisterAgentAsync(AgentRegistrationRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<PolicyFetchResponse> GetPolicyAsync(string agentId, string? childId, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
+
+        public Task<UsageReportResponse> SaveUsageReportAsync(UsageReportRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
     }
 }

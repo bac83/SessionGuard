@@ -26,17 +26,38 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase),
+    apiApp =>
+    {
+        apiApp.UseExceptionHandler();
+    });
+
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase),
+    uiApp =>
+    {
+        if (!app.Environment.IsDevelopment() && hasHttpsEndpoint)
+        {
+            uiApp.UseExceptionHandler("/Error", createScopeForErrors: true);
+        }
+        else
+        {
+            uiApp.UseExceptionHandler();
+        }
+    });
+
 if (!app.Environment.IsDevelopment() && hasHttpsEndpoint)
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-else
-{
-    app.UseExceptionHandler();
-}
 
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase),
+    uiApp =>
+    {
+        uiApp.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+    });
 if (hasHttpsEndpoint)
 {
     app.UseHttpsRedirection();
