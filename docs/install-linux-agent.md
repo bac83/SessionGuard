@@ -22,6 +22,7 @@ This guide covers the MVP Linux agent for SessionGuard.
 3. For manual binary installs, install the example systemd unit from `docs/sessionguard-agent.service`.
 4. The Debian package enables and restarts `sessionguard-agent.service` automatically after install or upgrade so the newly installed agent is used immediately.
 5. The Debian package installs a user-session autostart entry for the tray status UI at `/etc/xdg/autostart/sessionguard-tray.desktop`.
+6. Add each desktop user that should see the tray status to the `sessionguard` group and start a new login session.
 
 ## Artifact install example
 Download the latest successful `main` pipeline artifact with GitHub CLI and install it:
@@ -81,8 +82,11 @@ sudo tee /etc/sessionguard/user-map.json >/dev/null <<EOF
 }
 EOF
 
+sudo usermod -aG sessionguard "$LOCAL_USER"
 sudo systemctl restart sessionguard-agent.service
 ```
+
+The tray user needs a new login session before the new group membership is visible to Cinnamon autostart.
 
 Test the service and local status:
 
@@ -92,7 +96,7 @@ set -euo pipefail
 systemctl status sessionguard-agent.service --no-pager
 journalctl -u sessionguard-agent.service -n 80 --no-pager
 sudo test -s /var/lib/sessionguard/status/agent-status.json
-dotnet /opt/sessionguard/tray/Agent.Tray.dll --once
+sudo -u "$LOCAL_USER" SESSIONGUARD_STATUS_FILE=/var/lib/sessionguard/status/agent-status.json dotnet /opt/sessionguard/tray/Agent.Tray.dll --once
 ```
 
 ## Configuration
@@ -113,7 +117,7 @@ Typical settings:
 - The provided systemd unit runs the agent as `root` in the MVP so `loginctl` session locking works reliably.
 - The tray UI must not require root rights.
 - Usage is persisted in `/var/lib/sessionguard/cache/usage-state.json`. Package upgrades and service restarts must preserve this file.
-- The status snapshot is written to `/var/lib/sessionguard/status/agent-status.json` with read permissions so the user-session tray can display it.
+- The status snapshot is written to `/var/lib/sessionguard/status/agent-status.json` with owner read/write and `sessionguard` group read permissions. Add tray users to the `sessionguard` group instead of granting global read access.
 
 ## Verification
 - Confirm the agent can poll the server successfully.

@@ -6,7 +6,21 @@ mkdir -p /var/lib/sessionguard/cache
 mkdir -p /var/lib/sessionguard/status
 chmod 755 /etc/sessionguard
 chmod 700 /var/lib/sessionguard/cache
-chmod 755 /var/lib/sessionguard/status
+
+if ! getent group sessionguard >/dev/null 2>&1; then
+  if command -v addgroup >/dev/null 2>&1; then
+    addgroup --system sessionguard >/dev/null
+  else
+    groupadd --system sessionguard >/dev/null
+  fi
+fi
+
+chgrp sessionguard /var/lib/sessionguard/status
+chmod 2750 /var/lib/sessionguard/status
+if [ -f /var/lib/sessionguard/status/agent-status.json ]; then
+  chgrp sessionguard /var/lib/sessionguard/status/agent-status.json
+  chmod 640 /var/lib/sessionguard/status/agent-status.json
+fi
 
 if [ ! -f /etc/sessionguard/user-map.json ]; then
   cat > /etc/sessionguard/user-map.json <<'EOF'
