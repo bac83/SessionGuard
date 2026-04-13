@@ -150,7 +150,7 @@ public sealed class AgentLinuxTests
         var commandRunner = Substitute.For<ICommandRunner>();
         var environmentReader = Substitute.For<IEnvironmentReader>();
         environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
-        commandRunner.RunAsync("id", "-u alice", Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "1001", string.Empty));
         commandRunner.RunAsync(
                 "loginctl",
@@ -189,7 +189,7 @@ public sealed class AgentLinuxTests
         var commandRunner = Substitute.For<ICommandRunner>();
         var environmentReader = Substitute.For<IEnvironmentReader>();
         environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
-        commandRunner.RunAsync("id", "-u alice", Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "1001", string.Empty));
         commandRunner.RunAsync(
                 "loginctl",
