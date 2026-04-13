@@ -32,8 +32,6 @@ public sealed class LinuxSessionLockService(
                     "loginctl accepted lock request for session {SessionId} belonging to local user {LocalUser}",
                     session.Id,
                     mapping.LocalUser);
-
-                await TryDesktopLockFallbackAsync(mapping, session, cancellationToken);
                 continue;
             }
 
@@ -53,7 +51,7 @@ public sealed class LinuxSessionLockService(
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             logger.LogDebug("Using XDG_SESSION_ID={SessionId} for local user {LocalUser}", sessionId, mapping.LocalUser);
-            return [new LoginSession(sessionId, null, null)];
+            return [await ResolveSessionDetailsAsync(sessionId, cancellationToken)];
         }
 
         var result = await commandRunner.RunAsync("loginctl", "list-sessions --no-legend", cancellationToken);
@@ -87,6 +85,54 @@ public sealed class LinuxSessionLockService(
         }
 
         return sessions;
+    }
+
+    private async Task<LoginSession> ResolveSessionDetailsAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        var result = await commandRunner.RunAsync(
+            "loginctl",
+            $"show-session {sessionId} --property=Id --property=User --property=Display",
+            cancellationToken);
+
+        if (!result.Succeeded)
+        {
+            logger.LogDebug(
+                "loginctl show-session failed for session {SessionId}: {Detail}",
+                sessionId,
+                FirstNonEmpty(result.StandardError, result.StandardOutput)
+                    ?? $"loginctl show-session {sessionId} failed with exit code {result.ExitCode}.");
+            return new LoginSession(sessionId, null, null);
+        }
+
+        string? resolvedId = null;
+        string? userId = null;
+        string? display = null;
+
+        foreach (var line in result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separatorIndex = line.IndexOf('=');
+            if (separatorIndex <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..separatorIndex];
+            var value = line[(separatorIndex + 1)..];
+            switch (key)
+            {
+                case "Id":
+                    resolvedId = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+                case "User":
+                    userId = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+                case "Display":
+                    display = string.IsNullOrWhiteSpace(value) ? null : value;
+                    break;
+            }
+        }
+
+        return new LoginSession(resolvedId ?? sessionId, userId, display);
     }
 
     private async Task<bool> TryDesktopLockFallbackAsync(
