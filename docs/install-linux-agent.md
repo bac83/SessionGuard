@@ -114,7 +114,8 @@ Typical settings:
 
 ## Operational notes
 - The agent should continue working with the last valid policy if the server is temporarily unavailable.
-- The provided systemd unit runs the agent as `root` in the MVP so `loginctl` session locking works reliably.
+- The provided systemd unit runs the agent as `root` in the MVP so it can resolve desktop sessions and request locks.
+- Session locking first uses `loginctl lock-session`. If that fails, the agent also tries user-session fallbacks through the user's DBus session: first `cinnamon-screensaver-command --lock`, then `gnome-screensaver-command -l`.
 - The tray UI must not require root rights.
 - Usage is persisted in `/var/lib/sessionguard/cache/usage-state.json`. Package upgrades and service restarts must preserve this file.
 - The status snapshot is written to `/var/lib/sessionguard/status/agent-status.json` with owner read/write and `sessionguard` group read permissions. Add tray users to the `sessionguard` group instead of granting global read access.
@@ -123,4 +124,6 @@ Typical settings:
 - Confirm the agent can poll the server successfully.
 - Confirm a policy is cached locally.
 - Confirm a test budget expiration triggers a session lock.
-- Confirm `journalctl -u sessionguard-agent.service` shows the agent id, version, cache path, status path, policy decision, and lock attempt.
+- If the visible desktop does not lock, test the fallbacks directly with `runuser -u "$LOCAL_USER" -- env DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus cinnamon-screensaver-command --lock` and then `runuser -u "$LOCAL_USER" -- env DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus gnome-screensaver-command -l`.
+- If the user's desktop is not on `:0`, replace `DISPLAY=:0` with the actual session display before testing.
+- Confirm `journalctl -u sessionguard-agent.service` shows the agent id, version, cache path, status path, policy decision, lock attempt, and which lock method accepted the request.
