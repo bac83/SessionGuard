@@ -51,7 +51,19 @@ public sealed class LinuxSessionLockService(
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             logger.LogDebug("Using XDG_SESSION_ID={SessionId} for local user {LocalUser}", sessionId, mapping.LocalUser);
-            return [await ResolveSessionDetailsAsync(sessionId, cancellationToken)];
+            var xdgSession = await ResolveSessionDetailsAsync(sessionId, cancellationToken);
+            var expectedUserId = await ResolveLocalUserIdAsync(mapping, cancellationToken);
+            if (IsSessionOwnedByLocalUser(xdgSession, expectedUserId))
+            {
+                return [xdgSession];
+            }
+
+            logger.LogWarning(
+                "Ignoring XDG_SESSION_ID={SessionId} for local user {LocalUser} because it resolved to uid {ResolvedUserId} instead of {ExpectedUserId}",
+                sessionId,
+                mapping.LocalUser,
+                xdgSession.UserId ?? "<unknown>",
+                expectedUserId ?? "<unknown>");
         }
 
         var result = await commandRunner.RunAsync("loginctl", "list-sessions --no-legend", cancellationToken);
@@ -140,6 +152,7 @@ public sealed class LinuxSessionLockService(
         LoginSession session,
         CancellationToken cancellationToken)
     {
+        session = await EnrichSessionForDesktopFallbackAsync(session, cancellationToken);
         if (string.IsNullOrWhiteSpace(session.UserId))
         {
             logger.LogDebug(
@@ -200,6 +213,48 @@ public sealed class LinuxSessionLockService(
             mapping.LocalUser);
 
         return false;
+    }
+
+    private async Task<LoginSession> EnrichSessionForDesktopFallbackAsync(LoginSession session, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(session.UserId) && !string.IsNullOrWhiteSpace(session.Display))
+        {
+            return session;
+        }
+
+        var resolved = await ResolveSessionDetailsAsync(session.Id, cancellationToken);
+        return session with
+        {
+            UserId = string.IsNullOrWhiteSpace(session.UserId) ? resolved.UserId : session.UserId,
+            Display = string.IsNullOrWhiteSpace(session.Display) ? resolved.Display : session.Display
+        };
+    }
+
+    private async Task<string?> ResolveLocalUserIdAsync(UserChildMapping mapping, CancellationToken cancellationToken)
+    {
+        var result = await commandRunner.RunAsync("id", $"-u {mapping.LocalUser}", cancellationToken);
+        if (!result.Succeeded)
+        {
+            logger.LogDebug(
+                "Unable to resolve uid for local user {LocalUser}: {Detail}",
+                mapping.LocalUser,
+                FirstNonEmpty(result.StandardError, result.StandardOutput)
+                    ?? $"id -u {mapping.LocalUser} failed with exit code {result.ExitCode}.");
+            return null;
+        }
+
+        var value = result.StandardOutput.Trim();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static bool IsSessionOwnedByLocalUser(LoginSession session, string? expectedUserId)
+    {
+        if (string.IsNullOrWhiteSpace(session.UserId) || string.IsNullOrWhiteSpace(expectedUserId))
+        {
+            return false;
+        }
+
+        return string.Equals(session.UserId, expectedUserId, StringComparison.Ordinal);
     }
 
     private static string? FirstNonEmpty(params string?[] values)
