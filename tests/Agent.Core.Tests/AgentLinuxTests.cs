@@ -83,7 +83,7 @@ public sealed class AgentLinuxTests
     }
 
     [Fact]
-    public async Task LinuxSessionLockService_IncludesFallbackDetailsWhenLockFails()
+    public async Task LinuxSessionLockService_IncludesLockExitCodeWhenFallbackFails()
     {
         var commandRunner = Substitute.For<ICommandRunner>();
         var environmentReader = Substitute.For<IEnvironmentReader>();

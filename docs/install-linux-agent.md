@@ -124,5 +124,6 @@ Typical settings:
 - Confirm the agent can poll the server successfully.
 - Confirm a policy is cached locally.
 - Confirm a test budget expiration triggers a session lock.
-- If the visible desktop does not lock, test the fallbacks directly with `sudo -u "$LOCAL_USER" DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus cinnamon-screensaver-command --lock` and then `sudo -u "$LOCAL_USER" DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus gnome-screensaver-command -l`.
+- If the visible desktop does not lock, test the fallbacks directly with `runuser -u "$LOCAL_USER" -- env DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus cinnamon-screensaver-command --lock` and then `runuser -u "$LOCAL_USER" -- env DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/$(id -u "$LOCAL_USER") DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u "$LOCAL_USER")/bus gnome-screensaver-command -l`.
+- If the user's desktop is not on `:0`, replace `DISPLAY=:0` with the actual session display before testing.
 - Confirm `journalctl -u sessionguard-agent.service` shows the agent id, version, cache path, status path, policy decision, lock attempt, and which lock method accepted the request.
