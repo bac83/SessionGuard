@@ -243,19 +243,26 @@ public sealed class LinuxSessionLockService(
 
     private async Task<string?> ResolveLocalUserIdAsync(UserChildMapping mapping, CancellationToken cancellationToken)
     {
-        var result = await commandRunner.RunAsync("id", $"-u {mapping.LocalUser}", cancellationToken);
+        var safeLocalUser = QuoteCommandArgument(mapping.LocalUser);
+        var arguments = $"-u -- {safeLocalUser}";
+        var result = await commandRunner.RunAsync("id", arguments, cancellationToken);
         if (!result.Succeeded)
         {
             logger.LogDebug(
                 "Unable to resolve uid for local user {LocalUser}: {Detail}",
                 mapping.LocalUser,
                 FirstNonEmpty(result.StandardError, result.StandardOutput)
-                    ?? $"id -u {mapping.LocalUser} failed with exit code {result.ExitCode}.");
+                    ?? $"id {arguments} failed with exit code {result.ExitCode}.");
             return null;
         }
 
         var value = result.StandardOutput.Trim();
         return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string QuoteCommandArgument(string value)
+    {
+        return $"'{value.Replace("'", "'\"'\"'")}'";
     }
 
     private static bool IsSessionOwnedByLocalUser(LoginSession session, string? expectedUserId)
