@@ -161,6 +161,17 @@ public sealed class LinuxSessionLockService(
             return false;
         }
 
+        var localUser = mapping.LocalUser;
+        if (string.IsNullOrWhiteSpace(localUser)
+            || !System.Text.RegularExpressions.Regex.IsMatch(localUser, @"^[a-z_][a-z0-9_-]*[$]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        {
+            logger.LogWarning(
+                "Skipping desktop lock fallback for session {SessionId} because local user '{LocalUser}' is not a valid runuser target",
+                session.Id,
+                localUser);
+            return false;
+        }
+
         var runtimeDirectory = $"/run/user/{session.UserId}";
         var busAddress = $"unix:path={runtimeDirectory}/bus";
         var display = string.IsNullOrWhiteSpace(session.Display) ? ":0" : session.Display;
@@ -173,7 +184,7 @@ public sealed class LinuxSessionLockService(
 
         foreach (var attempt in attempts)
         {
-            var arguments = $"-u {mapping.LocalUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
+            var arguments = $"-u {localUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
             CommandResult result;
             try
             {
@@ -195,7 +206,7 @@ public sealed class LinuxSessionLockService(
                     "{LockMethod} fallback accepted lock request for session {SessionId} belonging to local user {LocalUser}",
                     attempt.Name,
                     session.Id,
-                    mapping.LocalUser);
+                    localUser);
                 return true;
             }
 
@@ -210,7 +221,7 @@ public sealed class LinuxSessionLockService(
         logger.LogWarning(
             "No desktop lock fallback accepted the lock request for session {SessionId} belonging to local user {LocalUser}",
             session.Id,
-            mapping.LocalUser);
+            localUser);
 
         return false;
     }
