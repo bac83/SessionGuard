@@ -29,6 +29,7 @@ project.fragment.lock.json
 artifacts/
 **/publish/
 .env
+.env.demo-vm.local
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
