@@ -37,17 +37,17 @@ Legende: `[ ]` offen · `[~]` in progress · `[x]` erledigt
 - [x] `tests/Server.Api.Tests/InfrastructureInitializationTests.cs` — Concurrent legacy upgrade, fresh DB, legacy stamp + data preserve, idempotent re-run
 - [x] `docs/operations.md` — Sektion "Schema upgrades" ergänzt
 
-## 4. CI / Release Publishing
+## 4. CI / Release Publishing ✅
 
-- [ ] `.github/workflows/ci.yml` prüfen: bei Tag-Push (`v*`) wird .deb als GitHub Release Asset hochgeladen
-- [ ] Falls fehlt: Step mit `softprops/action-gh-release` für `sessionguard-agent_*_amd64.deb`
-- [ ] Server-Image-Publish auf GHCR bei Tags zusätzlich zu `main` verifiziert
+- [x] `.github/workflows/ci.yml` `publish` job: bei Tag-Push (`v*`) wird .deb-Artifact gedownloaded und via `softprops/action-gh-release@v2` als GitHub Release Asset attached, mit auto-generated release notes
+- [x] `contents: write` Permission im publish-Job gesetzt
+- [x] Server-Image-Publish auf GHCR bei main + Tags (existierend, verifiziert)
 
-## 5. Doku & Compose Schliff
+## 5. Doku & Compose Schliff ✅
 
-- [ ] `docker-compose.yml` — Default `SESSIONGUARD_IMAGE_OWNER` auf echten GitHub-Owner setzen
-- [ ] `docs/install-linux-agent.md` — Sektion "Idle-Verhalten" + `IdleThresholdSeconds`-Konfig
-- [ ] `README.md` — MVP-Liste: aktive-Zeit-Tracking eintragen
+- [x] `docker-compose.yml` — Default `SESSIONGUARD_IMAGE_OWNER` auf `bac83` (Repo-Owner) gesetzt
+- [x] `docs/install-linux-agent.md` — Idle-Verhalten + `IdleThresholdSeconds` + erweiterte Lock-Fallbacks dokumentiert
+- [x] `README.md` — MVP-Liste: aktive-Zeit-Tracking + Multi-Desktop Lock-Fallbacks eingetragen
 
 ## 6. Verification (End-to-End)
 

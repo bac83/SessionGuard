@@ -8,7 +8,8 @@ Minimal client-server system for centrally managing screen-time policies for Lin
 - Example `docker-compose.yml`
 - Linux agent that polls for policy updates and caches the last valid policy offline
 - Local `user -> child_id` mapping on the agent
-- Usage tracking, remaining time display, persisted local usage state, and session lock on expiry or admin pause
+- Active-time usage tracking (idle and locked sessions are excluded), remaining time display, persisted local usage state, and session lock on expiry or admin pause
+- Multi-desktop session lock fallbacks (Cinnamon, GNOME, freedesktop ScreenSaver / KDE Plasma, XFCE, xdg-screensaver)
 - Versioned Linux agent Debian package with tray autostart support
 - GitHub CI/CD
 - Linux agent installation guide

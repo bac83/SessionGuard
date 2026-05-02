@@ -5,7 +5,7 @@ This guide covers the MVP Linux agent for SessionGuard.
 ## What the agent does
 - Polls the server for the current policy
 - Caches the last valid policy locally
-- Tracks local usage with a poll-interval-based MVP approximation for the mapped user and persists it across agent restarts
+- Tracks active session usage for the mapped user (idle and locked time do not consume the budget) and persists it across agent restarts
 - Locks the session when the daily budget is exhausted or the profile is paused in the admin UI
 - Shows remaining time in a small local UI
 
@@ -110,12 +110,14 @@ Typical settings:
 - `SessionGuard__Agent__StatusFilePath`
 - `SessionGuard__Agent__UserMapPath`
 - `SessionGuard__Agent__PollIntervalSeconds`
+- `SessionGuard__Agent__IdleThresholdSeconds` controls the `xprintidle` threshold above which a session counts as idle. Default `300`.
 - `SessionGuard__Agent__AgentVersion` is optional. When omitted, the packaged assembly version is reported.
 
 ## Operational notes
 - The agent should continue working with the last valid policy if the server is temporarily unavailable.
 - The provided systemd unit runs the agent as `root` in the MVP so it can resolve desktop sessions and request locks.
-- Session locking first uses `loginctl lock-session`. If that fails, the agent also tries user-session fallbacks through the user's DBus session: first `cinnamon-screensaver-command --lock`, then `gnome-screensaver-command -l`.
+- Session locking first uses `loginctl lock-session`. If that fails, the agent tries user-session fallbacks in order: `cinnamon-screensaver-command --lock`, `gnome-screensaver-command -l`, a freedesktop ScreenSaver `dbus-send` call (covers KDE Plasma and any DE implementing the spec), `xflock4` (XFCE), and finally `xdg-screensaver lock` as a generic last resort.
+- Idle and locked time do not count against the daily budget. Detection uses `loginctl show-session` `LockedHint` / `IdleHint`. When `xprintidle` is installed in the user's session, idle time above `SessionGuard__Agent__IdleThresholdSeconds` (default 300 s) also pauses tracking. If `loginctl` is unavailable the agent fails open and counts time as active.
 - The tray UI must not require root rights.
 - Usage is persisted in `/var/lib/sessionguard/cache/usage-state.json`. Package upgrades and service restarts must preserve this file.
 - The status snapshot is written to `/var/lib/sessionguard/status/agent-status.json` with owner read/write and `sessionguard` group read permissions. Add tray users to the `sessionguard` group instead of granting global read access.
