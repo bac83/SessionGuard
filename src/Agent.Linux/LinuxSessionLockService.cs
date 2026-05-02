@@ -178,13 +178,21 @@ public sealed class LinuxSessionLockService(
         var environment = $"DISPLAY={display} XDG_RUNTIME_DIR={runtimeDirectory} DBUS_SESSION_BUS_ADDRESS={busAddress}";
         var attempts = new[]
         {
-            new DesktopLockAttempt("cinnamon-screensaver-command", $"--lock", "Cinnamon screensaver"),
-            new DesktopLockAttempt("gnome-screensaver-command", "-l", "GNOME screensaver")
+            new DesktopLockAttempt("cinnamon-screensaver-command", "--lock", "Cinnamon screensaver"),
+            new DesktopLockAttempt("gnome-screensaver-command", "-l", "GNOME screensaver"),
+            new DesktopLockAttempt(
+                "dbus-send",
+                "--session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock",
+                "freedesktop ScreenSaver"),
+            new DesktopLockAttempt("xflock4", string.Empty, "XFCE xflock4"),
+            new DesktopLockAttempt("xdg-screensaver", "lock", "xdg-screensaver")
         };
 
         foreach (var attempt in attempts)
         {
-            var arguments = $"-u {localUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
+            var arguments = string.IsNullOrEmpty(attempt.Arguments)
+                ? $"-u {localUser} -- env {environment} {attempt.Command}"
+                : $"-u {localUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
             CommandResult result;
             try
             {

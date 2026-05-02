@@ -16,13 +16,17 @@ Legende: `[ ]` offen · `[~]` in progress · `[x]` erledigt
 - [x] `src/Agent.Linux/Program.cs` — DI Registrierung IdleDetector
 - [x] `tests/Agent.Core.Tests/AgentLinuxTests.cs` — Tracker freezes-while-idle, no-backfill-after-idle; Detector LockedHint/IdleHint/xprintidle/fail-open
 
-## 2. Lock-Service — KDE / XFCE / xdg-screensaver
+## 2. Lock-Service — Freedesktop / XFCE / xdg-screensaver ✅
 
-- [ ] `src/Agent.Linux/LinuxSessionLockService.cs` `attempts`-Array erweitern: `qdbus org.kde.screensaver /ScreenSaver Lock`, `xflock4`, `xdg-screensaver lock`
-- [ ] `tests/Agent.Linux.Tests/` neu — Project anlegen (xUnit + NSubstitute), in Solution einhängen
-- [ ] Test: loginctl success → kein Fallback aufgerufen
-- [ ] Test: loginctl fail + KDE success → qdbus-Aufruf mit korrekten Args
-- [ ] Test: alle Fallbacks fail → `InvalidOperationException` mit aussagekräftigem Detail
+- [x] `src/Agent.Linux/LinuxSessionLockService.cs` `attempts`-Array erweitert: `dbus-send … org.freedesktop.ScreenSaver.Lock` (deckt Plasma 5/6 + Mate + andere ab), `xflock4`, `xdg-screensaver lock`. Empty-Args-Pfad ohne trailing space.
+- [x] Tests in bestehender `tests/Agent.Core.Tests/AgentLinuxTests.cs` (kein neues Projekt nötig — Solution-Split nicht gerechtfertigt)
+- [x] Test: loginctl success → kein Fallback aufgerufen (existing)
+- [x] Test: Freedesktop ScreenSaver Fallback nach Cinnamon+GNOME fail
+- [x] Test: XFCE xflock4 Fallback nach screensavers fail
+- [x] Test: xdg-screensaver als letzter Fallback, Reihenfolge via `Received.InOrder` verifiziert
+- [x] Test: alle Fallbacks fail → `InvalidOperationException` (existing)
+
+**Follow-up (außerhalb dieser Slice):** logind `LockedHint` flippt nicht zuverlässig wenn Lock via externem Fallback erfolgt → IdleDetector könnte Session weiter als aktiv lesen. Mitigation: tracker hat eigene Lock-Awareness durch coordinator state, nicht kritisch im MVP.
 
 ## 3. EF Migrations
 
