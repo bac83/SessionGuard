@@ -24,6 +24,60 @@ public sealed class InfrastructureInitializationTests
         Assert.Contains("LastPolicyVersion", columns);
     }
 
+    [Fact]
+    public async Task InitializeServerInfrastructureAsync_OnFreshDatabase_AppliesInitialMigration()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await using var services = CreateServices(sqlitePath);
+
+        await services.InitializeServerInfrastructureAsync();
+
+        var historyEntries = await ReadMigrationHistoryAsync(sqlitePath);
+        Assert.NotEmpty(historyEntries);
+        Assert.Contains(historyEntries, id => id.EndsWith("_InitialCreate", StringComparison.Ordinal));
+
+        var columns = await ReadAgentColumnsAsync(sqlitePath);
+        Assert.Contains("AgentVersion", columns);
+    }
+
+    [Fact]
+    public async Task InitializeServerInfrastructureAsync_IsIdempotentWhenRunRepeatedlyOnStampedLegacyDatabase()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await CreateLegacyAgentsTableAsync(sqlitePath);
+
+        await using (var first = CreateServices(sqlitePath))
+        {
+            await first.InitializeServerInfrastructureAsync();
+        }
+
+        await using (var second = CreateServices(sqlitePath))
+        {
+            await second.InitializeServerInfrastructureAsync();
+        }
+
+        var historyEntries = await ReadMigrationHistoryAsync(sqlitePath);
+        Assert.Equal(historyEntries.Count, historyEntries.Distinct().Count());
+        Assert.Contains(historyEntries, id => id.EndsWith("_InitialCreate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InitializeServerInfrastructureAsync_OnLegacyDatabase_StampsHistoryWithoutLosingData()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await CreateLegacyAgentsTableAsync(sqlitePath);
+        await SeedAgentRowAsync(sqlitePath, "agent-legacy", "host-1");
+
+        await using var services = CreateServices(sqlitePath);
+        await services.InitializeServerInfrastructureAsync();
+
+        var historyEntries = await ReadMigrationHistoryAsync(sqlitePath);
+        Assert.Contains(historyEntries, id => id.EndsWith("_InitialCreate", StringComparison.Ordinal));
+
+        var preservedAgentId = await ReadFirstAgentIdAsync(sqlitePath);
+        Assert.Equal("agent-legacy", preservedAgentId);
+    }
+
     private static ServiceProvider CreateServices(string sqlitePath)
     {
         var configuration = new ConfigurationBuilder()
@@ -44,15 +98,56 @@ public sealed class InfrastructureInitializationTests
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
+            CREATE TABLE Children (
+                ChildId TEXT NOT NULL CONSTRAINT PK_Children PRIMARY KEY,
+                DisplayName TEXT NOT NULL,
+                DailyLimitMinutes INTEGER NOT NULL,
+                IsEnabled INTEGER NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL
+            );
             CREATE TABLE Agents (
                 AgentId TEXT NOT NULL CONSTRAINT PK_Agents PRIMARY KEY,
                 Hostname TEXT NOT NULL,
                 LocalUser TEXT NULL,
                 ChildId TEXT NULL,
                 LastSeenAtUtc TEXT NOT NULL,
-                LastUsageReportAtUtc TEXT NULL
+                LastUsageReportAtUtc TEXT NULL,
+                CONSTRAINT FK_Agents_Children_ChildId FOREIGN KEY (ChildId) REFERENCES Children (ChildId) ON DELETE SET NULL
             );
+            CREATE INDEX IX_Agents_ChildId ON Agents (ChildId);
+            CREATE TABLE UsageReports (
+                Id INTEGER NOT NULL CONSTRAINT PK_UsageReports PRIMARY KEY AUTOINCREMENT,
+                AgentId TEXT NOT NULL,
+                ChildId TEXT NOT NULL,
+                LocalUser TEXT NOT NULL,
+                UsageDateUtc TEXT NOT NULL,
+                UsedMinutes INTEGER NOT NULL,
+                ReportedAtUtc TEXT NOT NULL,
+                CONSTRAINT FK_UsageReports_Agents_AgentId FOREIGN KEY (AgentId) REFERENCES Agents (AgentId) ON DELETE CASCADE
+            );
+            CREATE UNIQUE INDEX IX_UsageReports_AgentId_UsageDateUtc ON UsageReports (AgentId, UsageDateUtc);
             """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedAgentRowAsync(string sqlitePath, string agentId, string hostname)
+    {
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO Agents (AgentId, Hostname, LastSeenAtUtc) VALUES ($id, $host, $seen)";
+        var idParameter = command.CreateParameter();
+        idParameter.ParameterName = "$id";
+        idParameter.Value = agentId;
+        command.Parameters.Add(idParameter);
+        var hostParameter = command.CreateParameter();
+        hostParameter.ParameterName = "$host";
+        hostParameter.Value = hostname;
+        command.Parameters.Add(hostParameter);
+        var seenParameter = command.CreateParameter();
+        seenParameter.ParameterName = "$seen";
+        seenParameter.Value = DateTimeOffset.UtcNow.ToString("O");
+        command.Parameters.Add(seenParameter);
         await command.ExecuteNonQueryAsync();
     }
 
@@ -70,6 +165,32 @@ public sealed class InfrastructureInitializationTests
         }
 
         return columns;
+    }
+
+    private static async Task<List<string>> ReadMigrationHistoryAsync(string sqlitePath)
+    {
+        var ids = new List<string>();
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT MigrationId FROM __EFMigrationsHistory";
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            ids.Add(reader.GetString(0));
+        }
+
+        return ids;
+    }
+
+    private static async Task<string?> ReadFirstAgentIdAsync(string sqlitePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT AgentId FROM Agents LIMIT 1";
+        var result = await command.ExecuteScalarAsync();
+        return result as string;
     }
 
     private static string CreateSqlitePath()

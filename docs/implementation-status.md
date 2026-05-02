@@ -28,14 +28,14 @@ Legende: `[ ]` offen · `[~]` in progress · `[x]` erledigt
 
 **Follow-up (außerhalb dieser Slice):** logind `LockedHint` flippt nicht zuverlässig wenn Lock via externem Fallback erfolgt → IdleDetector könnte Session weiter als aktiv lesen. Mitigation: tracker hat eigene Lock-Awareness durch coordinator state, nicht kritisch im MVP.
 
-## 3. EF Migrations
+## 3. EF Migrations ✅
 
-- [ ] `src/Server.Infrastructure/Server.Infrastructure.csproj` — `Microsoft.EntityFrameworkCore.Design` PrivateAssets ergänzen
-- [ ] `dotnet ef migrations add InitialCreate` (Schema inkl. `AgentVersion`/`LastPolicyVersion`)
-- [ ] `src/Server.Infrastructure/DependencyInjection.cs` — `EnsureCreatedAsync` + manuelle ALTER raus, `MigrateAsync` rein
-- [ ] Upgrade-Pfad: bestehende DB ohne `__EFMigrationsHistory` aber mit `Children` → Initial-Migration als applied markieren
-- [ ] `tests/Server.Api.Tests/InfrastructureInitializationTests.cs` — Test fresh DB + legacy-DB-Upgrade
-- [ ] `docs/operations.md` — Sektion "Schema-Upgrades laufen automatisch beim Container-Start"
+- [x] `src/Server.Infrastructure/Server.Infrastructure.csproj` + `src/Server.Ui/Server.Ui.csproj` — `Microsoft.EntityFrameworkCore.Design` PrivateAssets ergänzt
+- [x] `dotnet ef migrations add InitialCreate` — Schema inkl. `AgentVersion`/`LastPolicyVersion`/Indizes
+- [x] `src/Server.Infrastructure/DependencyInjection.cs` — `EnsureCreatedAsync` + Patch-Helpers raus, `MigrateAsync` rein
+- [x] Upgrade-Pfad: bestehende DB (alle drei Tabellen vorhanden, kein `__EFMigrationsHistory`) → fehlende Spalten ergänzt, alle Migrations als applied gestempelt; in BEGIN/COMMIT-Transaktion mit Re-Check; INSERT-OR-IGNORE auf PK-Konflikt; ALTER tolerant gegen `duplicate column`
+- [x] `tests/Server.Api.Tests/InfrastructureInitializationTests.cs` — Concurrent legacy upgrade, fresh DB, legacy stamp + data preserve, idempotent re-run
+- [x] `docs/operations.md` — Sektion "Schema upgrades" ergänzt
 
 ## 4. CI / Release Publishing
 

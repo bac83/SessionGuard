@@ -16,6 +16,11 @@ This document describes the MVP deployment and day-to-day operations.
 - Back up the volume regularly.
 - Avoid deleting the database file unless you intend to reset all data.
 
+## Schema upgrades
+- The server applies EF Core migrations automatically on container start.
+- Pre-migration databases (created before the InitialCreate migration was introduced) are detected by their missing `__EFMigrationsHistory` table; the existing schema is patched to match `InitialCreate` and stamped as already applied. Subsequent migrations apply normally.
+- Always back up the SQLite volume before upgrading the server image.
+
 ## Policy refresh model
 - The agent polls the server on a fixed interval.
 - The agent keeps the last valid policy locally for offline use.

@@ -1,8 +1,12 @@
+using System.Data;
+using System.Data.Common;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.Data.Sqlite;
 using Server.Infrastructure.Persistence;
 using Server.Infrastructure.Services;
 using Server.Infrastructure.Storage;
@@ -40,121 +44,134 @@ public static class DependencyInjection
     {
         await using var scope = services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SessionGuardDbContext>();
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        await EnsureColumnAsync(dbContext, "Agents", "AgentVersion", "TEXT", cancellationToken);
-        await EnsureColumnAsync(dbContext, "Agents", "LastPolicyVersion", "TEXT", cancellationToken);
-    }
-
-    private static async Task EnsureColumnAsync(
-        SessionGuardDbContext dbContext,
-        string tableName,
-        string columnName,
-        string columnType,
-        CancellationToken cancellationToken)
-    {
-        ValidateSqliteIdentifier(tableName);
-        ValidateSqliteIdentifier(columnName);
-        ValidateSqliteType(columnType);
 
         var connection = dbContext.Database.GetDbConnection();
-        var shouldClose = connection.State == System.Data.ConnectionState.Closed;
-        if (shouldClose)
+        var openedHere = connection.State == ConnectionState.Closed;
+        if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
         }
 
         try
         {
-            if (await ColumnExistsAsync(connection, tableName, columnName, cancellationToken))
+            if (await IsLegacyDatabaseAsync(connection, cancellationToken))
             {
-                return;
+                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+                if (await IsLegacyDatabaseAsync(connection, cancellationToken))
+                {
+                    await BringLegacyAgentsTableUpToDateAsync(connection, cancellationToken);
+                    await StampAllMigrationsAsAppliedAsync(dbContext, connection, cancellationToken);
+                }
+                await transaction.CommitAsync(cancellationToken);
             }
-
-            await AddColumnAsync(connection, tableName, columnName, columnType, cancellationToken);
         }
         finally
         {
-            if (shouldClose)
+            if (openedHere)
             {
                 await connection.CloseAsync();
             }
         }
+
+        await dbContext.Database.MigrateAsync(cancellationToken);
     }
 
-    private static async Task<bool> ColumnExistsAsync(
-        System.Data.Common.DbConnection connection,
-        string tableName,
-        string columnName,
-        CancellationToken cancellationToken)
+    private static async Task BringLegacyAgentsTableUpToDateAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"PRAGMA table_info({tableName})";
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await EnsureLegacyColumnAsync(connection, "Agents", "AgentVersion", cancellationToken);
+        await EnsureLegacyColumnAsync(connection, "Agents", "LastPolicyVersion", cancellationToken);
+    }
+
+    private static async Task EnsureLegacyColumnAsync(DbConnection connection, string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        if (!IsSafeIdentifier(tableName) || !IsSafeIdentifier(columnName))
+        {
+            throw new InvalidOperationException($"Refused unsafe identifier for legacy upgrade: {tableName}.{columnName}");
+        }
+
+        await using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName})";
+        await using var reader = await pragma.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
             {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static async Task AddColumnAsync(
-        System.Data.Common.DbConnection connection,
-        string tableName,
-        string columnName,
-        string columnType,
-        CancellationToken cancellationToken)
-    {
-        const int maxAttempts = 3;
-
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
-        {
-            try
-            {
-                await using var alterCommand = connection.CreateCommand();
-                alterCommand.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType}";
-                await alterCommand.ExecuteNonQueryAsync(cancellationToken);
                 return;
             }
-            catch (SqliteException ex) when (IsDuplicateColumn(ex))
-            {
-                if (await ColumnExistsAsync(connection, tableName, columnName, cancellationToken))
-                {
-                    return;
-                }
+        }
 
-                throw;
-            }
-            catch (SqliteException ex) when (IsTransientLock(ex) && attempt < maxAttempts)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), cancellationToken);
-            }
+        await reader.CloseAsync();
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} TEXT";
+        try
+        {
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode == 1
+            && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+            // Another startup added the column between the PRAGMA scan and our ALTER.
         }
     }
 
-    private static bool IsDuplicateColumn(SqliteException exception) =>
-        exception.SqliteErrorCode == 1
-        && exception.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSafeIdentifier(string value) =>
+        !string.IsNullOrWhiteSpace(value) && value.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '_');
 
-    private static bool IsTransientLock(SqliteException exception) =>
-        exception.SqliteErrorCode is 5 or 6;
-
-    private static void ValidateSqliteIdentifier(string value)
+    private static async Task<bool> IsLegacyDatabaseAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != '_'))
+        if (await TableExistsAsync(connection, "__EFMigrationsHistory", cancellationToken))
         {
-            throw new InvalidOperationException($"Invalid SQLite identifier '{value}'.");
+            return false;
         }
+
+        // Treat as legacy only when the full pre-migration schema is present. A partially
+        // initialized DB (some tables missing) falls through to MigrateAsync, which will
+        // fail loudly rather than stamp an incomplete schema as already migrated.
+        return await TableExistsAsync(connection, "Children", cancellationToken)
+            && await TableExistsAsync(connection, "Agents", cancellationToken)
+            && await TableExistsAsync(connection, "UsageReports", cancellationToken);
     }
 
-    private static void ValidateSqliteType(string value)
+    private static async Task<bool> TableExistsAsync(DbConnection connection, string tableName, CancellationToken cancellationToken)
     {
-        if (!string.Equals(value, "TEXT", StringComparison.OrdinalIgnoreCase))
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $name LIMIT 1";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$name";
+        parameter.Value = tableName;
+        command.Parameters.Add(parameter);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is not null;
+    }
+
+    private static async Task StampAllMigrationsAsAppliedAsync(
+        SessionGuardDbContext dbContext,
+        DbConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var historyRepository = dbContext.GetService<IHistoryRepository>();
+        var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+        var productVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "10.0.0";
+
+        await using (var createCommand = connection.CreateCommand())
         {
-            throw new InvalidOperationException($"Unsupported SQLite column type '{value}'.");
+            createCommand.CommandText = historyRepository.GetCreateIfNotExistsScript();
+            await createCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (var migrationId in migrationsAssembly.Migrations.Keys)
+        {
+            await using var insertCommand = connection.CreateCommand();
+            insertCommand.CommandText = historyRepository.GetInsertScript(new HistoryRow(migrationId, productVersion));
+            try
+            {
+                await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode is 19 or 1555)
+            {
+                // 19 = SQLITE_CONSTRAINT, 1555 = SQLITE_CONSTRAINT_PRIMARYKEY.
+                // Another startup already stamped this migration; safe to ignore.
+            }
         }
     }
 }
