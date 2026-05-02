@@ -9,6 +9,7 @@ namespace Agent.Linux;
 public sealed class LocalUsageTracker : IUsageTracker
 {
     private readonly TimeProvider _timeProvider;
+    private readonly IIdleDetector _idleDetector;
     private readonly string _stateFilePath;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.Web);
@@ -17,9 +18,10 @@ public sealed class LocalUsageTracker : IUsageTracker
 
     private readonly ILogger<LocalUsageTracker> _logger;
 
-    public LocalUsageTracker(TimeProvider timeProvider, AgentLinuxOptions options, ILogger<LocalUsageTracker> logger)
+    public LocalUsageTracker(TimeProvider timeProvider, IIdleDetector idleDetector, AgentLinuxOptions options, ILogger<LocalUsageTracker> logger)
     {
         _timeProvider = timeProvider;
+        _idleDetector = idleDetector;
         _logger = logger;
         _stateFilePath = Path.Combine(options.CacheDirectory, "usage-state.json");
     }
@@ -27,6 +29,7 @@ public sealed class LocalUsageTracker : IUsageTracker
     public async Task<int> GetUsedMinutesAsync(UserChildMapping mapping, DateOnly usageDateUtc, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
+        var isActive = await _idleDetector.IsActiveAsync(mapping, cancellationToken);
         await _gate.WaitAsync(cancellationToken);
 
         try
@@ -43,6 +46,17 @@ public sealed class LocalUsageTracker : IUsageTracker
                     usageDateUtc,
                     _stateFilePath);
                 return 0;
+            }
+
+            if (!isActive)
+            {
+                _state[mapping.LocalUser] = current with { LastSeen = now };
+                await SaveAsync(cancellationToken);
+                _logger.LogDebug(
+                    "Session for {LocalUser} is idle/locked; usage frozen at {UsedMinutes} min",
+                    mapping.LocalUser,
+                    current.UsedMinutes);
+                return current.UsedMinutes;
             }
 
             var elapsedMinutes = Math.Max((int)Math.Floor((now - current.LastSeen).TotalMinutes), 0);

@@ -300,11 +300,11 @@ public sealed class AgentLinuxTests
         var secondTimeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 10, 0, TimeSpan.Zero));
 
-        var firstTracker = new LocalUsageTracker(firstTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var firstTracker = new LocalUsageTracker(firstTimeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
         Assert.Equal(5, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
 
-        var secondTracker = new LocalUsageTracker(secondTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var secondTracker = new LocalUsageTracker(secondTimeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(10, await secondTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
     }
 
@@ -319,7 +319,7 @@ public sealed class AgentLinuxTests
             new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 9, 0, 1, 0, TimeSpan.Zero));
 
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 9), CancellationToken.None));
@@ -335,7 +335,7 @@ public sealed class AgentLinuxTests
         var options = new AgentLinuxOptions { CacheDirectory = directory };
         var mapping = new UserChildMapping("alice", "child-01");
         var timeProvider = new SequenceTimeProvider(new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
 
         var used = await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None);
 
@@ -351,7 +351,7 @@ public sealed class AgentLinuxTests
         var timeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 8, 12, 0, 30, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
 
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         var persistedAfterFirstPoll = await ReadPersistedLastSeenAsync(directory);
@@ -360,6 +360,151 @@ public sealed class AgentLinuxTests
         var persistedAfterSecondPoll = await ReadPersistedLastSeenAsync(directory);
 
         Assert.Equal(persistedAfterFirstPoll, persistedAfterSecondPoll);
+    }
+
+    [Fact]
+    public async Task LocalUsageTracker_FreezesUsageWhileIdle()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 30, 0, TimeSpan.Zero));
+        var idleDetector = new ScriptedIdleDetector(true, true, false);
+
+        var tracker = new LocalUsageTracker(timeProvider, idleDetector, options, NullLogger<LocalUsageTracker>.Instance);
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LocalUsageTracker_DoesNotBackfillIdleGapWhenActiveResumes()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 32, 0, TimeSpan.Zero));
+        var idleDetector = new ScriptedIdleDetector(true, true, false, true);
+
+        var tracker = new LocalUsageTracker(timeProvider, idleDetector, options, NullLogger<LocalUsageTracker>.Instance);
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(7, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsInactiveWhenLockedHintIsYes()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=yes\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.False(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsActiveWhenLogindHintsAreClear()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=no\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+        commandRunner.RunAsync(
+                "runuser",
+                Arg.Is<string>(arguments => arguments.Contains("xprintidle", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1500", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.True(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsInactiveWhenXprintIdleExceedsThreshold()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=no\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+        commandRunner.RunAsync(
+                "runuser",
+                Arg.Is<string>(arguments => arguments.Contains("xprintidle", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "600000", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions { IdleThresholdSeconds = 300 }, NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.False(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_FailsOpenWhenLoginctlIsUnavailable()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(127, string.Empty, "command not found"));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.True(active);
+    }
+
+    private static IIdleDetector AlwaysActiveDetector() => new ScriptedIdleDetector(true);
+
+    private sealed class ScriptedIdleDetector(params bool[] sequence) : IIdleDetector
+    {
+        private readonly Queue<bool> _values = new(sequence);
+        private bool _last = sequence.Length > 0 ? sequence[^1] : true;
+
+        public Task<bool> IsActiveAsync(UserChildMapping mapping, CancellationToken cancellationToken)
+        {
+            if (_values.Count > 0)
+            {
+                _last = _values.Dequeue();
+            }
+
+            return Task.FromResult(_last);
+        }
     }
 
     private static async Task<DateTimeOffset?> ReadPersistedLastSeenAsync(string directory)
