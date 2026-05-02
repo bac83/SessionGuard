@@ -26,8 +26,8 @@ public sealed class LinuxIdleDetector(
         }
 
         var session = resolution.Session;
+        var hints = resolution.Hints ?? await ReadSessionHintsAsync(session.Id, cancellationToken);
 
-        var hints = await ReadSessionHintsAsync(session.Id, cancellationToken);
         if (hints.Locked == true)
         {
             logger.LogDebug("Session {SessionId} for {LocalUser} reports LockedHint=yes", session.Id, mapping.LocalUser);
@@ -67,7 +67,8 @@ public sealed class LinuxIdleDetector(
             {
                 return new SessionResolution(
                     SessionResolutionOutcome.Found,
-                    new ResolvedSession(xdgSessionId, hints.UserId, hints.Display));
+                    new ResolvedSession(xdgSessionId, hints.UserId, hints.Display),
+                    hints);
             }
 
             logger.LogDebug(
@@ -82,7 +83,7 @@ public sealed class LinuxIdleDetector(
         if (!result.Succeeded)
         {
             logger.LogDebug("loginctl list-sessions failed (exit {ExitCode})", result.ExitCode);
-            return new SessionResolution(SessionResolutionOutcome.CommandFailed, null);
+            return new SessionResolution(SessionResolutionOutcome.CommandFailed, null, null);
         }
 
         foreach (var line in result.StandardOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -95,16 +96,19 @@ public sealed class LinuxIdleDetector(
 
             if (string.Equals(columns[2], mapping.LocalUser, StringComparison.Ordinal))
             {
-                return new SessionResolution(SessionResolutionOutcome.Found, new ResolvedSession(columns[0], columns[1], null));
+                return new SessionResolution(
+                    SessionResolutionOutcome.Found,
+                    new ResolvedSession(columns[0], columns[1], null),
+                    null);
             }
         }
 
-        return new SessionResolution(SessionResolutionOutcome.NoSessionForUser, null);
+        return new SessionResolution(SessionResolutionOutcome.NoSessionForUser, null, null);
     }
 
     private async Task<string?> ResolveLocalUserIdAsync(UserChildMapping mapping, CancellationToken cancellationToken)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(mapping.LocalUser, @"^[a-z_][a-z0-9_-]*[$]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        if (!LinuxIdentifiers.IsValidLocalUser(mapping.LocalUser))
         {
             return null;
         }
@@ -174,17 +178,9 @@ public sealed class LinuxIdleDetector(
     {
         var userId = !string.IsNullOrWhiteSpace(hints.UserId) ? hints.UserId : session.UserId;
         var display = !string.IsNullOrWhiteSpace(hints.Display) ? hints.Display : ":0";
-        if (string.IsNullOrWhiteSpace(userId) || !System.Text.RegularExpressions.Regex.IsMatch(userId, @"^\d+$"))
-        {
-            return null;
-        }
-
-        if (!System.Text.RegularExpressions.Regex.IsMatch(display, @"^:\d+(\.\d+)?$"))
-        {
-            return null;
-        }
-
-        if (!System.Text.RegularExpressions.Regex.IsMatch(mapping.LocalUser, @"^[a-z_][a-z0-9_-]*[$]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        if (!LinuxIdentifiers.IsNumericId(userId)
+            || !LinuxIdentifiers.IsXDisplay(display)
+            || !LinuxIdentifiers.IsValidLocalUser(mapping.LocalUser))
         {
             return null;
         }
@@ -229,5 +225,5 @@ public sealed class LinuxIdleDetector(
         CommandFailed
     }
 
-    private sealed record SessionResolution(SessionResolutionOutcome Outcome, ResolvedSession? Session);
+    private sealed record SessionResolution(SessionResolutionOutcome Outcome, ResolvedSession? Session, SessionHints? Hints);
 }

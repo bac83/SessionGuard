@@ -89,18 +89,19 @@ public static class DependencyInjection
             throw new InvalidOperationException($"Refused unsafe identifier for legacy upgrade: {tableName}.{columnName}");
         }
 
-        await using var pragma = connection.CreateCommand();
-        pragma.CommandText = $"PRAGMA table_info({tableName})";
-        await using var reader = await pragma.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var pragma = connection.CreateCommand())
         {
-            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            pragma.CommandText = $"PRAGMA table_info({tableName})";
+            await using var reader = await pragma.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
             {
-                return;
+                if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
             }
         }
 
-        await reader.CloseAsync();
         await using var alter = connection.CreateCommand();
         alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} TEXT";
         try
@@ -151,6 +152,9 @@ public static class DependencyInjection
     {
         var historyRepository = dbContext.GetService<IHistoryRepository>();
         var migrationsAssembly = dbContext.GetService<IMigrationsAssembly>();
+        // ProductVersion is informational only — written to __EFMigrationsHistory.ProductVersion and
+        // not used by EF for migration matching. Fallback "10.0.0" only fires under trimmed/AOT builds
+        // where the EF assembly version metadata is stripped.
         var productVersion = typeof(DbContext).Assembly.GetName().Version?.ToString() ?? "10.0.0";
 
         await using (var createCommand = connection.CreateCommand())

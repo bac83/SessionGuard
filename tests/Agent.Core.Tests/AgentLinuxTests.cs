@@ -126,11 +126,8 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("alice", StringComparison.Ordinal)
-                    && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -138,10 +135,7 @@ public sealed class AgentLinuxTests
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
         await commandRunner.Received(1).RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>());
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -159,13 +153,8 @@ public sealed class AgentLinuxTests
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:1", string.Empty));
         commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "logind did not lock"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("XDG_RUNTIME_DIR=/run/user/1001", StringComparison.Ordinal)
-                    && arguments.Contains("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:1", StringComparison.Ordinal)
-                    && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":1", "cinnamon-screensaver-command --lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -176,11 +165,7 @@ public sealed class AgentLinuxTests
             "loginctl",
             "show-session 42 --property=Id --property=User --property=Display",
             Arg.Any<CancellationToken>());
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("DISPLAY=:1", StringComparison.Ordinal)
-                && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -224,15 +209,11 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:2", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":2", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":2", "gnome-screensaver-command -l");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "cinnamon missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("gnome-screensaver-command -l", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -241,16 +222,8 @@ public sealed class AgentLinuxTests
 
         Received.InOrder(() =>
         {
-            commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:2", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>());
-            commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("gnome-screensaver-command -l", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:2", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>());
         });
     }
 
@@ -269,30 +242,21 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("gnome-screensaver-command", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
 
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -310,27 +274,24 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command", StringComparison.Ordinal)
-                    || arguments.Contains("gnome-screensaver-command", StringComparison.Ordinal)
-                    || arguments.Contains("dbus-send", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        var xflock4Args = BuildRunUserArgs("alice", "1001", ":0", "xflock4");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("xflock4", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
 
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("xflock4", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -348,15 +309,20 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => !arguments.Contains("xdg-screensaver", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        var xflock4Args = BuildRunUserArgs("alice", "1001", ":0", "xflock4");
+        var xdgArgs = BuildRunUserArgs("alice", "1001", ":0", "xdg-screensaver lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("xdg-screensaver lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xdgArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -365,11 +331,11 @@ public sealed class AgentLinuxTests
 
         Received.InOrder(() =>
         {
-            commandRunner.RunAsync("runuser", Arg.Is<string>(a => a.Contains("cinnamon-screensaver-command", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
-            commandRunner.RunAsync("runuser", Arg.Is<string>(a => a.Contains("gnome-screensaver-command", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
-            commandRunner.RunAsync("runuser", Arg.Is<string>(a => a.Contains("dbus-send", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
-            commandRunner.RunAsync("runuser", Arg.Is<string>(a => a.Contains("xflock4", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
-            commandRunner.RunAsync("runuser", Arg.Is<string>(a => a.Contains("xdg-screensaver lock", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", xdgArgs, Arg.Any<CancellationToken>());
         });
     }
 
@@ -606,6 +572,12 @@ public sealed class AgentLinuxTests
         var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
         Assert.True(active);
+    }
+
+    private static string BuildRunUserArgs(string localUser, string uid, string display, string command)
+    {
+        var environment = $"DISPLAY={display} XDG_RUNTIME_DIR=/run/user/{uid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus";
+        return $"-u {localUser} -- env {environment} {command}";
     }
 
     private static IIdleDetector AlwaysActiveDetector() => new ScriptedIdleDetector(true);

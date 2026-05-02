@@ -78,6 +78,62 @@ public sealed class InfrastructureInitializationTests
         Assert.Equal("agent-legacy", preservedAgentId);
     }
 
+    [Fact]
+    public async Task InitializeServerInfrastructureAsync_OnPartialLegacySchema_FailsLoudlyWithoutStamping()
+    {
+        var sqlitePath = CreateSqlitePath();
+        await CreatePartialLegacyTablesAsync(sqlitePath);
+        await using var services = CreateServices(sqlitePath);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => services.InitializeServerInfrastructureAsync());
+
+        // EF may create __EFMigrationsHistory before the failing CREATE TABLE; the contract is
+        // that no migration is stamped, leaving the DB in a state that re-run will surface again.
+        if (await TableExistsAsync(sqlitePath, "__EFMigrationsHistory"))
+        {
+            var history = await ReadMigrationHistoryAsync(sqlitePath);
+            Assert.Empty(history);
+        }
+    }
+
+    private static async Task CreatePartialLegacyTablesAsync(string sqlitePath)
+    {
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE Children (
+                ChildId TEXT NOT NULL CONSTRAINT PK_Children PRIMARY KEY,
+                DisplayName TEXT NOT NULL,
+                DailyLimitMinutes INTEGER NOT NULL,
+                IsEnabled INTEGER NOT NULL,
+                UpdatedAtUtc TEXT NOT NULL
+            );
+            CREATE TABLE Agents (
+                AgentId TEXT NOT NULL CONSTRAINT PK_Agents PRIMARY KEY,
+                Hostname TEXT NOT NULL,
+                LocalUser TEXT NULL,
+                ChildId TEXT NULL,
+                LastSeenAtUtc TEXT NOT NULL,
+                LastUsageReportAtUtc TEXT NULL
+            );
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<bool> TableExistsAsync(string sqlitePath, string tableName)
+    {
+        await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=$name";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "$name";
+        parameter.Value = tableName;
+        command.Parameters.Add(parameter);
+        return await command.ExecuteScalarAsync() is not null;
+    }
+
     private static ServiceProvider CreateServices(string sqlitePath)
     {
         var configuration = new ConfigurationBuilder()

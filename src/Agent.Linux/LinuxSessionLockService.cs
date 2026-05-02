@@ -162,8 +162,7 @@ public sealed class LinuxSessionLockService(
         }
 
         var localUser = mapping.LocalUser;
-        if (string.IsNullOrWhiteSpace(localUser)
-            || !System.Text.RegularExpressions.Regex.IsMatch(localUser, @"^[a-z_][a-z0-9_-]*[$]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        if (!LinuxIdentifiers.IsValidLocalUser(localUser))
         {
             logger.LogWarning(
                 "Skipping desktop lock fallback for session {SessionId} because local user '{LocalUser}' is not a valid runuser target",
@@ -188,6 +187,7 @@ public sealed class LinuxSessionLockService(
             new DesktopLockAttempt("xdg-screensaver", "lock", "xdg-screensaver")
         };
 
+        var failures = new List<string>(attempts.Length);
         foreach (var attempt in attempts)
         {
             var arguments = string.IsNullOrEmpty(attempt.Arguments)
@@ -205,6 +205,7 @@ public sealed class LinuxSessionLockService(
                     "{LockMethod} fallback could not be started for session {SessionId}",
                     attempt.Name,
                     session.Id);
+                failures.Add($"{attempt.Name}: spawn failed ({exception.GetType().Name}: {exception.Message})");
                 continue;
             }
 
@@ -218,18 +219,21 @@ public sealed class LinuxSessionLockService(
                 return true;
             }
 
+            var detail = FirstNonEmpty(result.StandardError, result.StandardOutput)
+                ?? $"exit code {result.ExitCode}";
             logger.LogDebug(
                 "{LockMethod} fallback failed for session {SessionId}: {Detail}",
                 attempt.Name,
                 session.Id,
-                FirstNonEmpty(result.StandardError, result.StandardOutput)
-                    ?? $"{attempt.Command} {attempt.Arguments} failed with exit code {result.ExitCode}.");
+                detail);
+            failures.Add($"{attempt.Name}: {detail}");
         }
 
         logger.LogWarning(
-            "No desktop lock fallback accepted the lock request for session {SessionId} belonging to local user {LocalUser}",
+            "All desktop lock fallbacks failed for session {SessionId} belonging to local user {LocalUser}. Attempts: {Attempts}",
             session.Id,
-            localUser);
+            localUser,
+            string.Join(" | ", failures));
 
         return false;
     }
