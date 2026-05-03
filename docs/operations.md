@@ -36,6 +36,11 @@ This document describes the MVP deployment and day-to-day operations.
 - Restore the database and restart the server to recover from a failed host.
 - Reinstall or restart agents after connectivity or local cache issues.
 
+## Releases
+- The publish workflow attaches the agent `.deb` to a GitHub Release whenever a tag matching `v*` is pushed.
+- Use SemVer-style tags (`v1.2.3`, `v1.2.3-rc1`); the release notes are auto-generated from commits between tags.
+- Non-`v*` tags do not trigger a release.
+
 ## Scope reminders
 - No web or app blocking.
 - No Home Assistant integration.

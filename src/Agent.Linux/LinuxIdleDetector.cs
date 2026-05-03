@@ -177,7 +177,16 @@ public sealed class LinuxIdleDetector(
         CancellationToken cancellationToken)
     {
         var userId = !string.IsNullOrWhiteSpace(hints.UserId) ? hints.UserId : session.UserId;
-        var display = !string.IsNullOrWhiteSpace(hints.Display) ? hints.Display : ":0";
+        var display = !string.IsNullOrWhiteSpace(hints.Display) ? hints.Display : null;
+        if (display is null)
+        {
+            display = ":0";
+            logger.LogDebug(
+                "Session {SessionId} for {LocalUser} has no Display set; falling back to {Display}",
+                session.Id,
+                mapping.LocalUser,
+                display);
+        }
         if (!LinuxIdentifiers.IsNumericId(userId)
             || !LinuxIdentifiers.IsXDisplay(display)
             || !LinuxIdentifiers.IsValidLocalUser(mapping.LocalUser))

@@ -57,6 +57,8 @@ public static class DependencyInjection
             if (await IsLegacyDatabaseAsync(connection, cancellationToken))
             {
                 await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+                // Re-check inside the transaction: another startup may have stamped history between
+                // the outer probe and acquiring the write lock. Cheap query; avoids redundant work.
                 if (await IsLegacyDatabaseAsync(connection, cancellationToken))
                 {
                     await BringLegacyAgentsTableUpToDateAsync(connection, cancellationToken);
@@ -112,6 +114,9 @@ public static class DependencyInjection
             && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
             // Another startup added the column between the PRAGMA scan and our ALTER.
+            // Message-based gating is intentional: SqliteErrorCode 1 is the generic SQL error,
+            // and SQLite ships error messages in English regardless of the host locale, so
+            // matching on "duplicate column" is stable across deployments.
         }
     }
 
