@@ -25,6 +25,11 @@ public interface IUsageTracker
     Task<int> GetUsedMinutesAsync(UserChildMapping mapping, DateOnly usageDateUtc, CancellationToken cancellationToken);
 }
 
+public interface IIdleDetector
+{
+    Task<bool> IsActiveAsync(UserChildMapping mapping, CancellationToken cancellationToken);
+}
+
 public interface ISessionController
 {
     Task LockAsync(UserChildMapping mapping, CancellationToken cancellationToken);

@@ -126,11 +126,8 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("alice", StringComparison.Ordinal)
-                    && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -138,10 +135,7 @@ public sealed class AgentLinuxTests
         await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
 
         await commandRunner.Received(1).RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>());
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -159,13 +153,8 @@ public sealed class AgentLinuxTests
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:1", string.Empty));
         commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "logind did not lock"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("XDG_RUNTIME_DIR=/run/user/1001", StringComparison.Ordinal)
-                    && arguments.Contains("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:1", StringComparison.Ordinal)
-                    && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":1", "cinnamon-screensaver-command --lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -176,11 +165,7 @@ public sealed class AgentLinuxTests
             "loginctl",
             "show-session 42 --property=Id --property=User --property=Display",
             Arg.Any<CancellationToken>());
-        await commandRunner.Received(1).RunAsync(
-            "runuser",
-            Arg.Is<string>(arguments => arguments.Contains("DISPLAY=:1", StringComparison.Ordinal)
-                && arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-            Arg.Any<CancellationToken>());
+        await commandRunner.Received(1).RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -224,15 +209,11 @@ public sealed class AgentLinuxTests
                 "show-session 42 --property=Id --property=User --property=Display",
                 Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:2", string.Empty));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":2", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":2", "gnome-screensaver-command -l");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(1, string.Empty, "cinnamon missing"));
-        commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("gnome-screensaver-command -l", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>())
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
             .Returns(new CommandResult(0, string.Empty, string.Empty));
 
         var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
@@ -241,16 +222,120 @@ public sealed class AgentLinuxTests
 
         Received.InOrder(() =>
         {
-            commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("cinnamon-screensaver-command --lock", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:2", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>());
-            commandRunner.RunAsync(
-                "runuser",
-                Arg.Is<string>(arguments => arguments.Contains("gnome-screensaver-command -l", StringComparison.Ordinal)
-                    && arguments.Contains("DISPLAY=:2", StringComparison.Ordinal)),
-                Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task LinuxSessionLockService_UsesFreedesktopFallbackAfterCinnamonAndGnomeFail()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "42 1001 alice seat0 tty2", string.Empty));
+        commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "logind did not lock"));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=Id --property=User --property=Display",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, string.Empty, string.Empty));
+
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
+
+        await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        await commandRunner.Received(1).RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LinuxSessionLockService_FallsThroughToXflock4WhenScreensaversFail()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "42 1001 alice seat0 tty2", string.Empty));
+        commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "logind did not lock"));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=Id --property=User --property=Display",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        var xflock4Args = BuildRunUserArgs("alice", "1001", ":0", "xflock4");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, string.Empty, string.Empty));
+
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
+
+        await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        await commandRunner.Received(1).RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LinuxSessionLockService_FallsThroughToXdgScreensaverAsLastResort()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "42 1001 alice seat0 tty2", string.Empty));
+        commandRunner.RunAsync("loginctl", "lock-session 42", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "logind did not lock"));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=Id --property=User --property=Display",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "Id=42\nUser=1001\nDisplay=:0", string.Empty));
+        var cinnamonArgs = BuildRunUserArgs("alice", "1001", ":0", "cinnamon-screensaver-command --lock");
+        var gnomeArgs = BuildRunUserArgs("alice", "1001", ":0", "gnome-screensaver-command -l");
+        var dbusArgs = BuildRunUserArgs("alice", "1001", ":0", "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock");
+        var xflock4Args = BuildRunUserArgs("alice", "1001", ":0", "xflock4");
+        var xdgArgs = BuildRunUserArgs("alice", "1001", ":0", "xdg-screensaver lock");
+        commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(1, string.Empty, "missing"));
+        commandRunner.RunAsync("runuser", xdgArgs, Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, string.Empty, string.Empty));
+
+        var service = new LinuxSessionLockService(commandRunner, environmentReader, NullLogger<LinuxSessionLockService>.Instance);
+
+        await service.LockAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Received.InOrder(() =>
+        {
+            commandRunner.RunAsync("runuser", cinnamonArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", gnomeArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", dbusArgs, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", xflock4Args, Arg.Any<CancellationToken>());
+            commandRunner.RunAsync("runuser", xdgArgs, Arg.Any<CancellationToken>());
         });
     }
 
@@ -300,11 +385,11 @@ public sealed class AgentLinuxTests
         var secondTimeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 10, 0, TimeSpan.Zero));
 
-        var firstTracker = new LocalUsageTracker(firstTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var firstTracker = new LocalUsageTracker(firstTimeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
         Assert.Equal(5, await firstTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
 
-        var secondTracker = new LocalUsageTracker(secondTimeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var secondTracker = new LocalUsageTracker(secondTimeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(10, await secondTracker.GetUsedMinutesAsync(mapping, day, CancellationToken.None));
     }
 
@@ -319,7 +404,7 @@ public sealed class AgentLinuxTests
             new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 9, 0, 1, 0, TimeSpan.Zero));
 
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 9), CancellationToken.None));
@@ -335,7 +420,7 @@ public sealed class AgentLinuxTests
         var options = new AgentLinuxOptions { CacheDirectory = directory };
         var mapping = new UserChildMapping("alice", "child-01");
         var timeProvider = new SequenceTimeProvider(new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
 
         var used = await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None);
 
@@ -351,7 +436,7 @@ public sealed class AgentLinuxTests
         var timeProvider = new SequenceTimeProvider(
             new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 4, 8, 12, 0, 30, TimeSpan.Zero));
-        var tracker = new LocalUsageTracker(timeProvider, options, NullLogger<LocalUsageTracker>.Instance);
+        var tracker = new LocalUsageTracker(timeProvider, AlwaysActiveDetector(), options, NullLogger<LocalUsageTracker>.Instance);
 
         Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
         var persistedAfterFirstPoll = await ReadPersistedLastSeenAsync(directory);
@@ -360,6 +445,157 @@ public sealed class AgentLinuxTests
         var persistedAfterSecondPoll = await ReadPersistedLastSeenAsync(directory);
 
         Assert.Equal(persistedAfterFirstPoll, persistedAfterSecondPoll);
+    }
+
+    [Fact]
+    public async Task LocalUsageTracker_FreezesUsageWhileIdle()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 30, 0, TimeSpan.Zero));
+        var idleDetector = new ScriptedIdleDetector(true, true, false);
+
+        var tracker = new LocalUsageTracker(timeProvider, idleDetector, options, NullLogger<LocalUsageTracker>.Instance);
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LocalUsageTracker_DoesNotBackfillIdleGapWhenActiveResumes()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "sessionguard-usage-tests", Guid.NewGuid().ToString("N"));
+        var options = new AgentLinuxOptions { CacheDirectory = directory };
+        var mapping = new UserChildMapping("alice", "child-01");
+        var timeProvider = new SequenceTimeProvider(
+            new DateTimeOffset(2026, 4, 8, 12, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 5, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 4, 8, 12, 32, 0, TimeSpan.Zero));
+        var idleDetector = new ScriptedIdleDetector(true, true, false, true);
+
+        var tracker = new LocalUsageTracker(timeProvider, idleDetector, options, NullLogger<LocalUsageTracker>.Instance);
+        Assert.Equal(0, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(5, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+        Assert.Equal(7, await tracker.GetUsedMinutesAsync(mapping, new DateOnly(2026, 4, 8), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsInactiveWhenLockedHintIsYes()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=yes\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.False(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsActiveWhenLogindHintsAreClear()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=no\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+        commandRunner.RunAsync(
+                "runuser",
+                Arg.Is<string>(arguments => arguments.Contains("xprintidle", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1500", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.True(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_ReportsInactiveWhenXprintIdleExceedsThreshold()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns("42");
+        commandRunner.RunAsync("id", "-u -- 'alice'", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "1001", string.Empty));
+        commandRunner.RunAsync(
+                "loginctl",
+                "show-session 42 --property=LockedHint --property=IdleHint --property=Display --property=User",
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "LockedHint=no\nIdleHint=no\nDisplay=:0\nUser=1001", string.Empty));
+        commandRunner.RunAsync(
+                "runuser",
+                Arg.Is<string>(arguments => arguments.Contains("xprintidle", StringComparison.Ordinal)),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(0, "600000", string.Empty));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions { IdleThresholdSeconds = 300 }, NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.False(active);
+    }
+
+    [Fact]
+    public async Task LinuxIdleDetector_FailsOpenWhenLoginctlIsUnavailable()
+    {
+        var commandRunner = Substitute.For<ICommandRunner>();
+        var environmentReader = Substitute.For<IEnvironmentReader>();
+        environmentReader.GetEnvironmentVariable("XDG_SESSION_ID").Returns((string?)null);
+        commandRunner.RunAsync("loginctl", "list-sessions --no-legend", Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(127, string.Empty, "command not found"));
+
+        var detector = new LinuxIdleDetector(commandRunner, environmentReader, new AgentLinuxOptions(), NullLogger<LinuxIdleDetector>.Instance);
+
+        var active = await detector.IsActiveAsync(new UserChildMapping("alice", "child-01"), CancellationToken.None);
+
+        Assert.True(active);
+    }
+
+    private static string BuildRunUserArgs(string localUser, string uid, string display, string command)
+    {
+        var environment = $"DISPLAY={display} XDG_RUNTIME_DIR=/run/user/{uid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus";
+        return $"-u {localUser} -- env {environment} {command}";
+    }
+
+    private static IIdleDetector AlwaysActiveDetector() => new ScriptedIdleDetector(true);
+
+    private sealed class ScriptedIdleDetector(params bool[] sequence) : IIdleDetector
+    {
+        private readonly Queue<bool> _values = new(sequence);
+        private bool _last = sequence.Length > 0 ? sequence[^1] : true;
+
+        public Task<bool> IsActiveAsync(UserChildMapping mapping, CancellationToken cancellationToken)
+        {
+            if (_values.Count > 0)
+            {
+                _last = _values.Dequeue();
+            }
+
+            return Task.FromResult(_last);
+        }
     }
 
     private static async Task<DateTimeOffset?> ReadPersistedLastSeenAsync(string directory)

@@ -8,4 +8,5 @@ public sealed class AgentLinuxOptions
     public string UserMapPath { get; set; } = "/etc/sessionguard/user-map.json";
     public string CacheDirectory { get; set; } = "/var/lib/sessionguard/cache";
     public string StatusFilePath { get; set; } = "/var/lib/sessionguard/status/agent-status.json";
+    public int IdleThresholdSeconds { get; set; } = 300;
 }

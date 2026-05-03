@@ -47,6 +47,7 @@ public static class Program
             var options = sp.GetRequiredService<AgentLinuxOptions>();
             return new JsonUserMappingProvider(options.UserMapPath);
         });
+        builder.Services.AddSingleton<IIdleDetector, LinuxIdleDetector>();
         builder.Services.AddSingleton<IUsageTracker, LocalUsageTracker>();
         builder.Services.AddSingleton<ISessionController, LinuxSessionLockService>();
         builder.Services.AddSingleton<IAgentStatusStore>(sp =>

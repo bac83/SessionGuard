@@ -16,6 +16,11 @@ This document describes the MVP deployment and day-to-day operations.
 - Back up the volume regularly.
 - Avoid deleting the database file unless you intend to reset all data.
 
+## Schema upgrades
+- The server applies EF Core migrations automatically on container start.
+- Pre-migration databases (created before the InitialCreate migration was introduced) are detected by their missing `__EFMigrationsHistory` table; the existing schema is patched to match `InitialCreate` and stamped as already applied. Subsequent migrations apply normally.
+- Always back up the SQLite volume before upgrading the server image.
+
 ## Policy refresh model
 - The agent polls the server on a fixed interval.
 - The agent keeps the last valid policy locally for offline use.
@@ -30,6 +35,11 @@ This document describes the MVP deployment and day-to-day operations.
 - Back up the SQLite volume before upgrades or schema changes.
 - Restore the database and restart the server to recover from a failed host.
 - Reinstall or restart agents after connectivity or local cache issues.
+
+## Releases
+- The publish workflow attaches the agent `.deb` to a GitHub Release whenever a tag matching `v*` is pushed.
+- Use SemVer-style tags (`v1.2.3`, `v1.2.3-rc1`); the release notes are auto-generated from commits between tags.
+- Non-`v*` tags do not trigger a release.
 
 ## Scope reminders
 - No web or app blocking.

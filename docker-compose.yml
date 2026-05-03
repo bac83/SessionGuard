@@ -1,6 +1,6 @@
 services:
   server:
-    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-sessionguard}/sessionguard-server:${SESSIONGUARD_IMAGE_TAG:-main}
+    image: ghcr.io/${SESSIONGUARD_IMAGE_OWNER:-bac83}/sessionguard-server:${SESSIONGUARD_IMAGE_TAG:-main}
     pull_policy: always
     restart: unless-stopped
     environment:

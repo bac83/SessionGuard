@@ -153,17 +153,16 @@ public sealed class LinuxSessionLockService(
         CancellationToken cancellationToken)
     {
         session = await EnrichSessionForDesktopFallbackAsync(session, cancellationToken);
-        if (string.IsNullOrWhiteSpace(session.UserId))
+        if (!LinuxIdentifiers.IsNumericId(session.UserId))
         {
             logger.LogDebug(
-                "Skipping desktop lock fallback for session {SessionId} because the numeric user id is unavailable",
+                "Skipping desktop lock fallback for session {SessionId} because the numeric user id is unavailable or unsafe",
                 session.Id);
             return false;
         }
 
         var localUser = mapping.LocalUser;
-        if (string.IsNullOrWhiteSpace(localUser)
-            || !System.Text.RegularExpressions.Regex.IsMatch(localUser, @"^[a-z_][a-z0-9_-]*[$]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        if (!LinuxIdentifiers.IsValidLocalUser(localUser))
         {
             logger.LogWarning(
                 "Skipping desktop lock fallback for session {SessionId} because local user '{LocalUser}' is not a valid runuser target",
@@ -172,19 +171,37 @@ public sealed class LinuxSessionLockService(
             return false;
         }
 
+        var display = string.IsNullOrWhiteSpace(session.Display) ? ":0" : session.Display;
+        if (!LinuxIdentifiers.IsXDisplay(display))
+        {
+            logger.LogWarning(
+                "Skipping desktop lock fallback for session {SessionId} because DISPLAY '{Display}' is not a valid X display",
+                session.Id,
+                display);
+            return false;
+        }
+
         var runtimeDirectory = $"/run/user/{session.UserId}";
         var busAddress = $"unix:path={runtimeDirectory}/bus";
-        var display = string.IsNullOrWhiteSpace(session.Display) ? ":0" : session.Display;
         var environment = $"DISPLAY={display} XDG_RUNTIME_DIR={runtimeDirectory} DBUS_SESSION_BUS_ADDRESS={busAddress}";
         var attempts = new[]
         {
-            new DesktopLockAttempt("cinnamon-screensaver-command", $"--lock", "Cinnamon screensaver"),
-            new DesktopLockAttempt("gnome-screensaver-command", "-l", "GNOME screensaver")
+            new DesktopLockAttempt("cinnamon-screensaver-command", "--lock", "Cinnamon screensaver"),
+            new DesktopLockAttempt("gnome-screensaver-command", "-l", "GNOME screensaver"),
+            new DesktopLockAttempt(
+                "dbus-send",
+                "--session --dest=org.freedesktop.ScreenSaver --type=method_call /ScreenSaver org.freedesktop.ScreenSaver.Lock",
+                "freedesktop ScreenSaver"),
+            new DesktopLockAttempt("xflock4", string.Empty, "XFCE xflock4"),
+            new DesktopLockAttempt("xdg-screensaver", "lock", "xdg-screensaver")
         };
 
+        var failures = new List<string>(attempts.Length);
         foreach (var attempt in attempts)
         {
-            var arguments = $"-u {localUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
+            var arguments = string.IsNullOrEmpty(attempt.Arguments)
+                ? $"-u {localUser} -- env {environment} {attempt.Command}"
+                : $"-u {localUser} -- env {environment} {attempt.Command} {attempt.Arguments}";
             CommandResult result;
             try
             {
@@ -197,6 +214,7 @@ public sealed class LinuxSessionLockService(
                     "{LockMethod} fallback could not be started for session {SessionId}",
                     attempt.Name,
                     session.Id);
+                failures.Add($"{attempt.Name}: spawn failed ({exception.GetType().Name}: {exception.Message})");
                 continue;
             }
 
@@ -210,18 +228,21 @@ public sealed class LinuxSessionLockService(
                 return true;
             }
 
+            var detail = FirstNonEmpty(result.StandardError, result.StandardOutput)
+                ?? $"exit code {result.ExitCode}";
             logger.LogDebug(
                 "{LockMethod} fallback failed for session {SessionId}: {Detail}",
                 attempt.Name,
                 session.Id,
-                FirstNonEmpty(result.StandardError, result.StandardOutput)
-                    ?? $"{attempt.Command} {attempt.Arguments} failed with exit code {result.ExitCode}.");
+                detail);
+            failures.Add($"{attempt.Name}: {detail}");
         }
 
         logger.LogWarning(
-            "No desktop lock fallback accepted the lock request for session {SessionId} belonging to local user {LocalUser}",
+            "All desktop lock fallbacks failed for session {SessionId} belonging to local user {LocalUser}. Attempts: {Attempts}",
             session.Id,
-            localUser);
+            localUser,
+            string.Join(" | ", failures));
 
         return false;
     }
