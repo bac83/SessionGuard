@@ -119,7 +119,7 @@ jobs:
       - agent-deb-build
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     permissions:
-      contents: write
+      contents: read
       packages: write
     steps:
       - name: Checkout
@@ -145,8 +145,17 @@ jobs:
           provenance: false
           sbom: false
 
+  release:
+    name: Publish Agent Release
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - agent-deb-build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
       - name: Download agent deb artifact
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/download-artifact@v4
         with:
           pattern: sessionguard-agent_*_amd64
@@ -154,7 +163,6 @@ jobs:
           merge-multiple: true
 
       - name: Publish GitHub Release with agent deb
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.deb

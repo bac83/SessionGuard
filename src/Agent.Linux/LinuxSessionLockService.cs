@@ -153,10 +153,10 @@ public sealed class LinuxSessionLockService(
         CancellationToken cancellationToken)
     {
         session = await EnrichSessionForDesktopFallbackAsync(session, cancellationToken);
-        if (string.IsNullOrWhiteSpace(session.UserId))
+        if (!LinuxIdentifiers.IsNumericId(session.UserId))
         {
             logger.LogDebug(
-                "Skipping desktop lock fallback for session {SessionId} because the numeric user id is unavailable",
+                "Skipping desktop lock fallback for session {SessionId} because the numeric user id is unavailable or unsafe",
                 session.Id);
             return false;
         }
@@ -171,9 +171,18 @@ public sealed class LinuxSessionLockService(
             return false;
         }
 
+        var display = string.IsNullOrWhiteSpace(session.Display) ? ":0" : session.Display;
+        if (!LinuxIdentifiers.IsXDisplay(display))
+        {
+            logger.LogWarning(
+                "Skipping desktop lock fallback for session {SessionId} because DISPLAY '{Display}' is not a valid X display",
+                session.Id,
+                display);
+            return false;
+        }
+
         var runtimeDirectory = $"/run/user/{session.UserId}";
         var busAddress = $"unix:path={runtimeDirectory}/bus";
-        var display = string.IsNullOrWhiteSpace(session.Display) ? ":0" : session.Display;
         var environment = $"DISPLAY={display} XDG_RUNTIME_DIR={runtimeDirectory} DBUS_SESSION_BUS_ADDRESS={busAddress}";
         var attempts = new[]
         {

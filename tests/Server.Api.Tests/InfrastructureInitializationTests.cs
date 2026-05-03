@@ -11,7 +11,7 @@ public sealed class InfrastructureInitializationTests
     public async Task InitializeServerInfrastructureAsync_AddsMissingAgentColumnsDuringConcurrentStartup()
     {
         var sqlitePath = CreateSqlitePath();
-        await CreateLegacyAgentsTableAsync(sqlitePath);
+        await CreateLegacyDatabaseSchemaAsync(sqlitePath);
         await using var firstServices = CreateServices(sqlitePath);
         await using var secondServices = CreateServices(sqlitePath);
 
@@ -44,7 +44,7 @@ public sealed class InfrastructureInitializationTests
     public async Task InitializeServerInfrastructureAsync_IsIdempotentWhenRunRepeatedlyOnStampedLegacyDatabase()
     {
         var sqlitePath = CreateSqlitePath();
-        await CreateLegacyAgentsTableAsync(sqlitePath);
+        await CreateLegacyDatabaseSchemaAsync(sqlitePath);
 
         await using (var first = CreateServices(sqlitePath))
         {
@@ -65,7 +65,7 @@ public sealed class InfrastructureInitializationTests
     public async Task InitializeServerInfrastructureAsync_OnLegacyDatabase_StampsHistoryWithoutLosingData()
     {
         var sqlitePath = CreateSqlitePath();
-        await CreateLegacyAgentsTableAsync(sqlitePath);
+        await CreateLegacyDatabaseSchemaAsync(sqlitePath);
         await SeedAgentRowAsync(sqlitePath, "agent-legacy", "host-1");
 
         await using var services = CreateServices(sqlitePath);
@@ -148,7 +148,7 @@ public sealed class InfrastructureInitializationTests
         return services.BuildServiceProvider();
     }
 
-    private static async Task CreateLegacyAgentsTableAsync(string sqlitePath)
+    private static async Task CreateLegacyDatabaseSchemaAsync(string sqlitePath)
     {
         await using var connection = new SqliteConnection($"Data Source={sqlitePath}");
         await connection.OpenAsync();

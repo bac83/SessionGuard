@@ -125,17 +125,35 @@ public static class DependencyInjection
 
     private static async Task<bool> IsLegacyDatabaseAsync(DbConnection connection, CancellationToken cancellationToken)
     {
-        if (await TableExistsAsync(connection, "__EFMigrationsHistory", cancellationToken))
+        // Treat as legacy only when the full pre-migration schema is present. A partially
+        // initialized DB (some tables missing) falls through to MigrateAsync, which will
+        // fail loudly rather than stamp an incomplete schema as already migrated.
+        var legacyTablesPresent = await TableExistsAsync(connection, "Children", cancellationToken)
+            && await TableExistsAsync(connection, "Agents", cancellationToken)
+            && await TableExistsAsync(connection, "UsageReports", cancellationToken);
+
+        if (!legacyTablesPresent)
         {
             return false;
         }
 
-        // Treat as legacy only when the full pre-migration schema is present. A partially
-        // initialized DB (some tables missing) falls through to MigrateAsync, which will
-        // fail loudly rather than stamp an incomplete schema as already migrated.
-        return await TableExistsAsync(connection, "Children", cancellationToken)
-            && await TableExistsAsync(connection, "Agents", cancellationToken)
-            && await TableExistsAsync(connection, "UsageReports", cancellationToken);
+        // History table absent OR present but empty (e.g. EF created the table on a previous
+        // failed startup before any migration row was written) both mean nothing has been
+        // stamped yet, so the legacy path still needs to run.
+        if (!await TableExistsAsync(connection, "__EFMigrationsHistory", cancellationToken))
+        {
+            return true;
+        }
+
+        return !await HistoryHasRowsAsync(connection, cancellationToken);
+    }
+
+    private static async Task<bool> HistoryHasRowsAsync(DbConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM __EFMigrationsHistory LIMIT 1";
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is not null;
     }
 
     private static async Task<bool> TableExistsAsync(DbConnection connection, string tableName, CancellationToken cancellationToken)

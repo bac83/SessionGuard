@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Repos\\\\SessionGuard\" -Recurse -Name -Type f)",
+      "Bash(Select-Object -First 100)",
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "Bash(gh api *)"
+    ]
+  }
+}
